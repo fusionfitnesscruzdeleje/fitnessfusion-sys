@@ -4,9 +4,14 @@ import sys
 # Add frontend/api to path so we can import models
 sys.path.append(os.path.join(os.path.dirname(__file__), 'frontend', 'api'))
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), 'backend', '.env'))
+
 # Neon DB URL
-DATABASE_URL = "postgresql://neondb_owner:npg_9u7zFAqsQaxi@ep-withered-feather-apfc52bv-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require"
-os.environ["DATABASE_URL"] = DATABASE_URL
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    print("Error: DATABASE_URL not found in backend/.env")
+    sys.exit(1)
 
 from sqlalchemy import create_engine, text
 from models import Base

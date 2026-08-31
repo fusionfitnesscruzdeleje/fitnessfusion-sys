@@ -74,6 +74,7 @@ export default function UserApp() {
   const [holidays, setHolidays] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
   const [weekSchedulesMap, setWeekSchedulesMap] = useState<Record<string, any[]>>({});
 
   const [confirmModal, setConfirmModal] = useState<{
@@ -381,6 +382,7 @@ const fetchUserBookings = async (memberDni: string) => {
 
   const handleDayClick = async (dayNum: number) => {
     const now = new Date();
+    now.setMonth(now.getMonth() + monthOffset);
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
     
     const clickDate = new Date(dateStr + "T00:00:00");
@@ -775,15 +777,30 @@ const fetchUserBookings = async (memberDni: string) => {
                 <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar min-h-0 space-y-6">
                   {viewMode === 'month' ? (
                     <>
-                       <div className="flex items-center justify-between mb-4">
-                           <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">
-                              {new Date().toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
-                           </p>
+                       <div className="flex justify-between items-center gap-3 mb-4">
+                          <button 
+                             onClick={() => setMonthOffset(prev => prev - 1)} 
+                             className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase hover:bg-white/10 text-white transition-all">
+                             Anterior
+                          </button>
+                          <span className="text-[10px] font-black uppercase text-white/60 text-center tracking-widest">
+                             {(() => {
+                               const d = new Date();
+                               d.setMonth(d.getMonth() + monthOffset);
+                               return d.toLocaleString('es-AR', { month: 'long', year: 'numeric' });
+                             })()}
+                          </span>
+                          <button 
+                             onClick={() => setMonthOffset(prev => prev + 1)} 
+                             className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black uppercase hover:bg-white/10 text-white transition-all">
+                             Siguiente
+                          </button>
                        </div>
                        <div className="grid grid-cols-7 gap-2 mb-10 text-center font-black text-[10px] uppercase">
                            {["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map((d,i)=>(<div key={i} className="text-white/10">{d}</div>))}
                            {(() => {
                              const now = new Date();
+                             now.setMonth(now.getMonth() + monthOffset);
                              const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
                              const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
                              const padding = firstDay === 0 ? 6 : firstDay - 1;
