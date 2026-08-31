@@ -2677,3 +2677,4 @@ function ProfileModule({ user, onSave }: any) {
 function NoAccess() {
   return <div className="h-40 flex flex-col items-center justify-center text-center p-6 bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10"><Lock size={24} className="text-red-500 mb-4" /><h3 className="text-xs font-black text-black dark:text-white uppercase tracking-widest">Acceso Restringido</h3></div>;
 }
+
