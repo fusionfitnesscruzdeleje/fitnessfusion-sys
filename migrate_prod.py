@@ -30,6 +30,7 @@ with engine.connect() as conn:
         ("staff", "username", "VARCHAR"),
         ("staff", "shift", "VARCHAR DEFAULT 'Mañana'"),
         ("class_schedules", "specific_date", "VARCHAR"),
+        ("bookings", "attended_at", "TIMESTAMP"),
     ]
 
     for table, column, col_type in columns_to_add:

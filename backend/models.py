@@ -51,6 +51,7 @@ class Booking(Base):
     class_schedule_id = Column(Integer, ForeignKey("class_schedules.id"), nullable=True)
     class_name = Column(String)
     start_time = Column(DateTime)
+    attended_at = Column(DateTime, nullable=True)
     status = Column(String, default="reserved") # reserved, attended, cancelled
     exercises_done = Column(JSON, nullable=True)
 

@@ -197,7 +197,7 @@ def get_member_checkins(member_id: int, db: Session = Depends(get_db)):
         models.Booking.member_id == member_id,
         models.Booking.status.in_(["attended", "reserved"])
     ).all()
-    booking_list = [{"id": f"b_{b.id}", "checkin_at": (b.start_time or today).isoformat() + "Z", "type": b.class_name or "Tótem Adicional"} for b in bookings]
+    booking_list = [{"id": f"b_{b.id}", "checkin_at": (b.attended_at or b.start_time or today).isoformat() + "Z", "type": b.class_name or "Tótem Adicional"} for b in bookings]
 
     all_attendance = sorted(checkin_list + booking_list, key=lambda x: x["checkin_at"], reverse=True)
 
@@ -471,7 +471,8 @@ def get_class_bookings(schedule_id: int, date: str, db: Session = Depends(get_db
     bookings = db.query(models.Booking).filter(
         models.Booking.class_schedule_id == schedule_id,
         models.Booking.start_time >= start_of_day,
-        models.Booking.start_time <= end_of_day
+        models.Booking.start_time <= end_of_day,
+        models.Booking.status != "cancelled"
     ).all()
     
     result = []
@@ -500,6 +501,11 @@ def update_booking_status(booking_id: int, payload: dict, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Estado inválido")
     
     booking.status = new_status
+    if new_status == "attended":
+        booking.attended_at = datetime.datetime.utcnow()
+    else:
+        booking.attended_at = None
+        
     db.commit()
     return {"status": "updated", "booking_id": booking_id, "new_status": new_status}
 
@@ -557,6 +563,7 @@ def create_walk_in_booking(payload: dict, db: Session = Depends(get_db)):
         class_schedule_id=schedule.id,
         class_name=schedule.name,
         start_time=start_dt,
+        attended_at=datetime.datetime.utcnow(),
         status="attended"
     )
     db.add(new_booking)
