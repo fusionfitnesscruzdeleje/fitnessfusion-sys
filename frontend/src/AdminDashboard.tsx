@@ -156,9 +156,7 @@ function AgendaModule({ members, API_URL }: any) {
 
     allSchedules.forEach(s => {
       const key = `${s.start_time}-${s.end_time}`;
-      if (!deletedSlotKeys.has(key)) {
-        slotsMap.set(key, { start: s.start_time, end: s.end_time });
-      }
+      slotsMap.set(key, { start: s.start_time, end: s.end_time });
     });
 
     const sortedSlots = Array.from(slotsMap.values()).sort((a, b) => a.start.localeCompare(b.start));
@@ -194,9 +192,9 @@ function AgendaModule({ members, API_URL }: any) {
   const selectedWeekday = getDayOfWeek(selectedDate);
 
 
-  const fetchClassBookings = async (scheduleId: number) => {
+  const fetchClassBookings = async (scheduleId: number, fetchDateStr?: string) => {
     try {
-      const res = await fetch(`${API_URL}/admin/class_schedules/${scheduleId}/bookings?date=${selectedDate}`);
+      const res = await fetch(`${API_URL}/admin/class_schedules/${scheduleId}/bookings?date=${fetchDateStr || selectedDate}`);
       if (res.ok) setClassBookings(await res.json());
     } catch (e) { console.error(e); }
   };
@@ -503,7 +501,7 @@ function AgendaModule({ members, API_URL }: any) {
                           const targetDateStr = targetDate.toISOString().split('T')[0];
                           setSelectedDate(targetDateStr);
                           setActiveSchedule(s);
-                          fetchClassBookings(s.id);
+                          fetchClassBookings(s.id, targetDateStr);
                         }}
                         style={{ backgroundColor: s.color, textShadow: '0px 1px 3px rgba(0,0,0,0.9)' }}
                         className={`w-9 sm:w-14 h-7 sm:h-9 rounded-lg sm:rounded-xl text-white font-black text-[7px] sm:text-[9px] uppercase flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md ${isSelected ? 'ring-2 ring-orange-500 scale-105' : 'opacity-90'}`}>
@@ -661,6 +659,12 @@ function AgendaModule({ members, API_URL }: any) {
                     setIsEditingClass(true);
                     setIsClassModalOpen(true);
                   }} className="text-[8px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">Editar</button>
+                  <button onClick={() => {
+                    const targetDateStr = selectedDate;
+                    setSelectedDate(targetDateStr);
+                    setActiveSchedule(activeSchedule);
+                    fetchClassBookings(activeSchedule.id, targetDateStr);
+                  }} className="text-[8px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">Re-cargar Asistentes</button>
                   <button onClick={() => {
                     handleDeleteClass(activeSchedule.id);
                   }} className="text-[8px] font-black text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 px-2 py-1 rounded">Eliminar</button>
