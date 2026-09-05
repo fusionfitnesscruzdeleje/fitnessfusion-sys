@@ -1575,7 +1575,8 @@ export default function AdminDashboard() {
         is_active: true,
         allow_unification: !!selectedItem.allow_unification
       };
-      if (isEditMode) {
+      const isEdit = !!selectedItem.id;
+      if (isEdit) {
         const res = await fetch(`${API_URL}/admin/plans/${selectedItem.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -1927,7 +1928,7 @@ export default function AdminDashboard() {
                          <p className="text-[8px] font-black uppercase text-blue-400 mb-2 tracking-widest">Asistencia · {memberCheckins.length} ingresos registrados</p>
                          {checkinStats?.plans_breakdown ? (
                            <div className="space-y-2 mb-3">
-                             {checkinStats.plans_breakdown.map((pb: any, idx: number) => (
+                             {checkinStats.plans_breakdown.filter((pb: any) => pb.type.toLowerCase() !== 'adicional').map((pb: any, idx: number) => (
                                <div key={idx} className="bg-gray-50 dark:bg-black/40 p-2.5 rounded-xl border border-gray-200 dark:border-white/5">
                                  <div className="flex justify-between items-center mb-1.5">
                                    <span className="text-[9px] font-black uppercase text-orange-500">{pb.name} ({pb.type})</span>
@@ -1957,7 +1958,18 @@ export default function AdminDashboard() {
                              <div key={i} className="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/5 p-3 rounded-xl flex justify-between items-center">
                                <div className="flex items-center gap-2">
                                   <div className="w-6 h-6 bg-blue-500/10 rounded-lg flex items-center justify-center text-blue-400 text-[8px] font-black">{memberCheckins.length - i}</div>
-                                  {(() => { const dt = new Date(c.checkin_at.replace(/\.\d+Z$/, 'Z')); const fecha = dt.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit'}); const hora = dt.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit',hour12:true}); return <div><p className="font-black text-black dark:text-white text-[9px]">{fecha}</p><p className="text-[7px] text-gray-500 dark:text-white/20 font-black">{hora}</p></div>; })()}
+                                  {(() => { 
+                                    const dt = new Date(c.checkin_at.replace(/\.\d+Z$/, 'Z')); 
+                                    const fecha = dt.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit'}); 
+                                    const hora = dt.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit',hour12:true}); 
+                                    const titleStr = c.type ? `${fecha} ${c.type}` : fecha;
+                                    return (
+                                      <div>
+                                        <p className="font-black text-black dark:text-white text-[9px]">{titleStr}</p>
+                                        <p className="text-[7px] text-gray-500 dark:text-white/20 font-black">{hora}</p>
+                                      </div>
+                                    ); 
+                                  })()}
                                </div>
                                <button
                                  onClick={async () => {
@@ -2456,7 +2468,7 @@ function PlansModule({ plans, onEdit, onDelete, onAddClick }: any) {
               <p className="text-2xl font-black mb-4">${p.price}<span className="text-[10px] text-gray-500 dark:text-white/20 font-black">/mes</span></p>
               <div className="space-y-1 mb-6">
                  <div className="flex items-center gap-2 text-[10px] text-gray-600 dark:text-white/40 font-bold"><CheckCircle size={10} className="text-green-500"/> {p.daysPerWeek ?? p.days_per_week} días/sem</div>
-                 <div className="flex items-center gap-2 text-[10px] text-gray-600 dark:text-white/40 font-bold truncate"><CheckCircle size={10} className="text-green-500"/> {(p.classes || []).join(', ') || 'Musculación'}</div>
+                 <div className="flex items-start gap-2 text-[10px] text-gray-600 dark:text-white/40 font-bold break-words"><CheckCircle size={10} className="text-green-500 flex-shrink-0 mt-0.5"/> <span className="whitespace-normal leading-tight">{(p.classes || []).join(', ') || 'Musculación'}</span></div>
               </div>
               <div className="flex gap-2"><button onClick={()=>onEdit(p)} className="flex-1 py-2 bg-white dark:bg-white/5 rounded-xl text-[9px] font-black uppercase">Editar</button><button onClick={()=>onDelete(p)} className="p-2 text-red-500/30 hover:text-red-500"><Trash2 size={14}/></button></div>
            </div>

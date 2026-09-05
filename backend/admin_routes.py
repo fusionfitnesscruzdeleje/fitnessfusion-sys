@@ -191,13 +191,13 @@ def get_member_checkins(member_id: int, db: Session = Depends(get_db)):
 
     # Combined checkins & bookings list
     checkins = db.query(models.Checkin).filter(models.Checkin.member_id == member_id).all()
-    checkin_list = [{"id": f"c_{c.id}", "checkin_at": (c.checkin_at or today).isoformat() + "Z", "type": "Tótem Principal"} for c in checkins]
+    checkin_list = [{"id": f"c_{c.id}", "checkin_at": (c.checkin_at or today).isoformat() + "Z", "type": ""} for c in checkins]
 
     bookings = db.query(models.Booking).filter(
         models.Booking.member_id == member_id,
         models.Booking.status.in_(["attended", "reserved"])
     ).all()
-    booking_list = [{"id": f"b_{b.id}", "checkin_at": (b.attended_at or b.start_time or today).isoformat() + "Z", "type": b.class_name or "Tótem Adicional"} for b in bookings]
+    booking_list = [{"id": f"b_{b.id}", "checkin_at": (b.attended_at or b.start_time or today).isoformat() + "Z", "type": f'Adicional "{b.class_name}"' if b.class_name else "Adicional"} for b in bookings]
 
     all_attendance = sorted(checkin_list + booking_list, key=lambda x: x["checkin_at"], reverse=True)
 
