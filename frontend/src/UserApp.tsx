@@ -60,10 +60,8 @@ export default function UserApp() {
 
   // User Data State
   const [userData, setUserData] = useState({
-    name: "", dni: "", plan: "Miembro", maxDaysPerWeek: 7, streak: 0, streakMessage: "",
-    routine: [] as any[],
-    evolution: [],
-    attendanceHistory: []
+    name: "", dni: "", plan: "Miembro", additional_plans: [] as string[], maxDaysPerWeek: 7, streak: 0, streakMessage: "",
+    routine: [] as any[], evolution: [] as any[], attendanceHistory: [] as any[]
   });
 
 
@@ -415,7 +413,7 @@ const fetchUserBookings = async (memberDni: string) => {
 
 
   const handleBookClass = async (scheduleId: number) => {
-    const hasAdicional = (userData.membership_type?.toLowerCase().includes('adicional')) || 
+    const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
                          (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
     if (!hasAdicional) {
       showConfirm(
@@ -448,7 +446,7 @@ const fetchUserBookings = async (memberDni: string) => {
   };
 
   const handleBookClassFromWeek = async (scheduleId: number, dateStr: string) => {
-    const hasAdicional = (userData.membership_type?.toLowerCase().includes('adicional')) || 
+    const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
                          (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
     if (!hasAdicional) {
       showConfirm(
