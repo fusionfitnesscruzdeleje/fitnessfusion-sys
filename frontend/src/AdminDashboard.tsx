@@ -215,16 +215,21 @@ function AgendaModule({ members, API_URL }: any) {
   };
 
   const handleDeleteBooking = async (bookingId: number) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar a esta persona de la clase?')) return;
-    try {
-      const res = await fetch(`${API_URL}/admin/bookings/${bookingId}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        fetchClassBookings(activeSchedule.id);
-        fetchSchedules();
+    showConfirm(
+      'Eliminar Persona de la Clase',
+      '¿Estás seguro de que deseas eliminar a esta persona de la clase?',
+      async () => {
+        try {
+          const res = await fetch(`${API_URL}/admin/bookings/${bookingId}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            fetchClassBookings(activeSchedule.id);
+            fetchSchedules();
+          }
+        } catch (e) { console.error(e); }
       }
-    } catch (e) { console.error(e); }
+    );
   };
 
   const handleAddWalkIn = async (member: any) => {
@@ -672,11 +677,10 @@ function AgendaModule({ members, API_URL }: any) {
                     setIsEditingClass(true);
                     setIsClassModalOpen(true);
                   }} className="text-[8px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">Editar</button>
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     const targetDateStr = selectedDate;
-                    setSelectedDate(targetDateStr);
-                    setActiveSchedule(activeSchedule);
-                    fetchClassBookings(activeSchedule.id, targetDateStr);
+                    await fetchClassBookings(activeSchedule.id, targetDateStr);
+                    await fetchSchedules();
                   }} className="text-[12px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">🔄</button>
                   <button onClick={() => {
                     handleDeleteClass(activeSchedule.id);

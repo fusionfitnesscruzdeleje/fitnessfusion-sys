@@ -412,7 +412,7 @@ const fetchUserBookings = async (memberDni: string) => {
   };
 
 
-  const handleBookClass = async (scheduleId: number) => {
+  const handleBookClass = async (scheduleId: number, className: string, classTime: string) => {
     const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
                          (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
     if (!hasAdicional) {
@@ -423,29 +423,35 @@ const fetchUserBookings = async (memberDni: string) => {
       );
       return;
     }
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
-    try {
-      const res = await fetch(`${API_URL}/user/${userData.dni}/book`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ class_schedule_id: scheduleId, date: dateStr })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast("Reserva realizada con éxito", "success");
-        fetchUserBookings(userData.dni);
-        setIsBookingModalOpen(false);
-      } else {
-        alert(data.detail || "Error al reservar");
+    showConfirm(
+      "Confirmar Reserva",
+      `¿Deseas reservar la clase de ${className} para el día ${selectedDay} a las ${classTime} HS?`,
+      async () => {
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
+        try {
+          const res = await fetch(`${API_URL}/user/${userData.dni}/book`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ class_schedule_id: scheduleId, date: dateStr })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast("Reserva realizada con éxito", "success");
+            fetchUserBookings(userData.dni);
+            setIsBookingModalOpen(false);
+          } else {
+            alert(data.detail || "Error al reservar");
+          }
+        } catch (e) {
+          console.error(e);
+          showToast("Error al conectar con el servidor", "success");
+        }
       }
-    } catch (e) {
-      console.error(e);
-      showToast("Error al conectar con el servidor", "success");
-    }
+    );
   };
 
-  const handleBookClassFromWeek = async (scheduleId: number, dateStr: string) => {
+  const handleBookClassFromWeek = async (scheduleId: number, dateStr: string, className: string, classTime: string) => {
     const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
                          (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
     if (!hasAdicional) {
@@ -456,24 +462,32 @@ const fetchUserBookings = async (memberDni: string) => {
       );
       return;
     }
-    try {
-      const res = await fetch(`${API_URL}/user/${userData.dni}/book`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ class_schedule_id: scheduleId, date: dateStr })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast("Reserva realizada con éxito", "success");
-        fetchUserBookings(userData.dni);
-        fetchWeekSchedules(getWeekDates(weekOffset));
-      } else {
-        alert(data.detail || "Error al reservar");
+    const parts = dateStr.split('-');
+    const displayDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    showConfirm(
+      "Confirmar Reserva",
+      `¿Reservar clase de ${className} para el ${displayDate} a las ${classTime} HS?`,
+      async () => {
+        try {
+          const res = await fetch(`${API_URL}/user/${userData.dni}/book`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ class_schedule_id: scheduleId, date: dateStr })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast("Reserva realizada con éxito", "success");
+            fetchUserBookings(userData.dni);
+            fetchWeekSchedules(getWeekDates(weekOffset));
+          } else {
+            alert(data.detail || "Error al reservar");
+          }
+        } catch (e) {
+          console.error(e);
+          showToast("Error al conectar con el servidor", "success");
+        }
       }
-    } catch (e) {
-      console.error(e);
-      showToast("Error al conectar con el servidor", "success");
-    }
+    );
   };
 
   const handleCancelBooking = (bookingId: number) => {
