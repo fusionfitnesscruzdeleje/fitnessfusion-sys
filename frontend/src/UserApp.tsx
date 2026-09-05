@@ -415,6 +415,16 @@ const fetchUserBookings = async (memberDni: string) => {
 
 
   const handleBookClass = async (scheduleId: number) => {
+    const hasAdicional = (userData.membership_type?.toLowerCase().includes('adicional')) || 
+                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
+    if (!hasAdicional) {
+      showConfirm(
+        "Plan Requerido",
+        "Para poder reservar debe solicitar el plan Adicional a su plan actual o mejorarlo.",
+        () => {}
+      );
+      return;
+    }
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
     try {
@@ -438,6 +448,16 @@ const fetchUserBookings = async (memberDni: string) => {
   };
 
   const handleBookClassFromWeek = async (scheduleId: number, dateStr: string) => {
+    const hasAdicional = (userData.membership_type?.toLowerCase().includes('adicional')) || 
+                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
+    if (!hasAdicional) {
+      showConfirm(
+        "Plan Requerido",
+        "Para poder reservar debe solicitar el plan Adicional a su plan actual o mejorarlo.",
+        () => {}
+      );
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/user/${userData.dni}/book`, {
         method: 'POST',

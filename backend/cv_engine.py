@@ -7,7 +7,7 @@ import time
 
 def _model_path():
     if getattr(sys, 'frozen', False):
-        base = os.path.dirname(sys.executable)
+        base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     else:
         base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, 'yolov8n.pt')
@@ -37,6 +37,8 @@ class CVEngine:
             self.current_color = (0, 255, 255) # Yellow
         elif status in ["AL DIA", "ACTIVO"]:
             self.current_color = (0, 255, 0) # Green
+        elif status == "SIN PLAN" or status == "SIN PASES":
+            self.current_color = (0, 165, 255) # Orange for Sin Plan / Sin Pases
         else:
             self.current_color = (128, 128, 128) # Gray
 

@@ -214,6 +214,19 @@ function AgendaModule({ members, API_URL }: any) {
     } catch (e) { console.error(e); }
   };
 
+  const handleDeleteBooking = async (bookingId: number) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar a esta persona de la clase?')) return;
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${bookingId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchClassBookings(activeSchedule.id);
+        fetchSchedules();
+      }
+    } catch (e) { console.error(e); }
+  };
+
   const handleAddWalkIn = async (member: any) => {
     const isHoliday = holidays.find(h => h.date === selectedDate);
     if (isHoliday) {
@@ -664,7 +677,7 @@ function AgendaModule({ members, API_URL }: any) {
                     setSelectedDate(targetDateStr);
                     setActiveSchedule(activeSchedule);
                     fetchClassBookings(activeSchedule.id, targetDateStr);
-                  }} className="text-[8px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">Re-cargar Asistentes</button>
+                  }} className="text-[12px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">🔄</button>
                   <button onClick={() => {
                     handleDeleteClass(activeSchedule.id);
                   }} className="text-[8px] font-black text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 px-2 py-1 rounded">Eliminar</button>
@@ -712,6 +725,9 @@ function AgendaModule({ members, API_URL }: any) {
                           <input type="checkbox" checked={b.status === 'attended'} onChange={() => handleToggleAttendance(b.id, b.status)} className="w-4 h-4 accent-green-500 rounded border-white/10" />
                           <span className={`text-[8px] font-black uppercase ${b.status === 'attended' ? 'text-green-500' : 'text-gray-400'}`}>Asistió</span>
                         </label>
+                        <button onClick={() => handleDeleteBooking(b.id)} className="text-red-500 hover:text-red-400 p-1 bg-red-500/10 hover:bg-red-500/20 rounded ml-2" title="Eliminar de la clase">
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                     </div>
                   )) : (

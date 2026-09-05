@@ -509,6 +509,16 @@ def update_booking_status(booking_id: int, payload: dict, db: Session = Depends(
     db.commit()
     return {"status": "updated", "booking_id": booking_id, "new_status": new_status}
 
+@router.delete("/bookings/{booking_id}")
+def delete_booking(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    
+    booking.status = "cancelled"
+    db.commit()
+    return {"status": "success", "message": "Reserva eliminada"}
+
 @router.post("/bookings/walk-in")
 def create_walk_in_booking(payload: dict, db: Session = Depends(get_db)):
     member_dni = payload.get("dni")

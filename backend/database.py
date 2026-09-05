@@ -6,7 +6,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # When running as frozen exe, .env lives next to the executable
 if getattr(sys, 'frozen', False):
-    _BASE_DIR = os.path.dirname(sys.executable)
+    _BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
 else:
     _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 

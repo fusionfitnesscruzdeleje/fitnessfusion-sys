@@ -3,7 +3,7 @@ import os
 
 # Resolve .env path before any other imports that depend on env vars
 if getattr(sys, 'frozen', False):
-    _BASE_DIR = os.path.dirname(sys.executable)
+    _BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
 else:
     _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
