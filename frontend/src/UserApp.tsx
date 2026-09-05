@@ -1399,6 +1399,10 @@ const fetchUserBookings = async (memberDni: string) => {
               <div className="mx-auto w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mb-4 border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-bounce">
                 <AlertTriangle size={24} strokeWidth={2.5} />
               </div>
+            ) : confirmModal.title.includes("Requerido") ? (
+              <div className="mx-auto w-12 h-12 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center justify-center mb-4 border border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.3)] animate-pulse">
+                <AlertTriangle size={24} strokeWidth={2.5} />
+              </div>
             ) : (
               <div className="mx-auto w-12 h-12 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center mb-4 border border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.3)] animate-pulse">
                 <Check size={24} strokeWidth={3} />
@@ -1416,11 +1420,13 @@ const fetchUserBookings = async (memberDni: string) => {
                 className="flex-1 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 active:scale-95 rounded-xl text-[9px] font-black uppercase text-white transition-all">
                 Cerrar
               </button>
-              <button 
-                onClick={confirmModal.onConfirm} 
-                className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase text-white shadow-lg active:scale-95 transition-all ${confirmModal.title.includes("Cancelar") ? 'bg-red-500 hover:bg-red-600 shadow-red-500/25' : 'bg-green-500 hover:bg-green-600 shadow-green-500/25'}`}>
-                Confirmar
-              </button>
+              {!confirmModal.title.includes("Requerido") && (
+                <button 
+                  onClick={confirmModal.onConfirm} 
+                  className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase text-white shadow-lg active:scale-95 transition-all ${confirmModal.title.includes("Cancelar") ? 'bg-red-500 hover:bg-red-600 shadow-red-500/25' : 'bg-green-500 hover:bg-green-600 shadow-green-500/25'}`}>
+                  Confirmar
+                </button>
+              )}
             </div>
           </div>
         </div>
