@@ -3,7 +3,7 @@ import os
 
 # Resolve .env path before any other imports that depend on env vars
 if getattr(sys, 'frozen', False):
-    _BASE_DIR = os.path.dirname(sys.executable)
+    _BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
 else:
     _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -21,8 +21,6 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 import models
 from cv_engine import CVEngine
-import uvicorn
-from main import app as fastapi_app
 
 def compute_status(member) -> str:
     """Calcula el estado según los días transcurridos desde joined_at. INACTIVO se respeta siempre."""
@@ -48,7 +46,7 @@ class SplashScreen(ctk.CTkToplevel):
     def __init__(self):
         super().__init__()
         self.title("Fusion Fitness Adicional")
-        self.geometry("400x520")
+        self.geometry("450x520")
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(fg_color="#050505")
@@ -56,7 +54,7 @@ class SplashScreen(ctk.CTkToplevel):
         # Center Window
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        x = (sw // 2) - 200
+        x = (sw // 2) - 225
         y = (sh // 2) - 260
         self.geometry(f"+{x}+{y}")
 
@@ -70,7 +68,7 @@ class SplashScreen(ctk.CTkToplevel):
             ctk.CTkLabel(self, image=logo_img, text="").pack(pady=(50, 8))
 
         # UI Elements
-        self.label = ctk.CTkLabel(self, text="FUSION FITNESS ADICIONAL", font=ctk.CTkFont(size=30, weight="bold", family="Helvetica"), text_color="#f97316")
+        self.label = ctk.CTkLabel(self, text="FUSION FITNESS ADICIONAL", font=ctk.CTkFont(size=24, weight="bold", family="Helvetica"), text_color="#f97316")
         self.label.pack(pady=(0, 4))
         ctk.CTkLabel(self, text="Sistema de Control de Acceso", font=ctk.CTkFont(size=11), text_color="#444").pack(pady=(0, 10))
         
@@ -118,8 +116,7 @@ class GymDesktopKiosk:
                 self.splash.update_status(0.2, msg)
                 time.sleep(4)
 
-        self.splash.update_status(0.5, "Iniciando servidor...")
-        threading.Thread(target=lambda: uvicorn.run(fastapi_app, host="0.0.0.0", port=8000, log_level="error"), daemon=True).start()
+        self.splash.update_status(0.5, "Servicio iniciado")
 
         self.splash.update_status(0.8, "Iniciando cámara...")
         self.cv_engine = CVEngine()
@@ -250,57 +247,93 @@ class GymDesktopKiosk:
         try:
             member = db.query(models.Member).filter(models.Member.dni == dni).first()
             if member:
-                if member.status == "INACTIVO":
+                status = compute_status(member)
+                if status != member.status:
+                    member.status = status
+                    db.commit()
+
+                if status == "INACTIVO":
                     self.cv_engine.set_member_status(member.name, "INACTIVO")
                     self.root.after(0, lambda: self.render_status_result(member.name, "INACTIVO", dni, "Socio Inactivo"))
                     return
-
+                
+                has_adicional = False
                 add_plans = member.additional_plans or []
-                if not add_plans:
+                for p in add_plans:
+                    if "adicional" in p.lower():
+                        has_adicional = True
+                        break
+                
+                if member.membership_type and "adicional" in member.membership_type.lower():
+                    has_adicional = True
+
+                if not has_adicional:
                     self.cv_engine.set_member_status(member.name, "SIN PLAN")
                     self.root.after(0, lambda: self.render_status_result(member.name, "SIN PLAN", dni, "Sin Plan Adicional\nContratado"))
                     return
 
                 now = datetime.datetime.utcnow()
-                cycle_start = member.joined_at if member.joined_at else (now - datetime.timedelta(days=30))
-
-                total_allowed_additional = 0
-                for add_name in add_plans:
-                    p_obj = db.query(models.Plan).filter(models.Plan.name == add_name, models.Plan.is_active == True).first()
-                    add_days = p_obj.days_per_week if p_obj else 2
-                    total_allowed_additional += (add_days * 4)
-
-                used_additional = db.query(models.Booking).filter(
+                
+                # Mes actual
+                meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+                mes_str = meses[now.month]
+                dia_actual = now.day
+                
+                start_of_today = datetime.datetime(now.year, now.month, now.day)
+                
+                sessions_used_totem = db.query(models.Checkin).filter(
+                    models.Checkin.member_id == member.id,
+                    models.Checkin.checkin_at >= start_of_today
+                ).count()
+                
+                sessions_used_bookings = db.query(models.Booking).filter(
                     models.Booking.member_id == member.id,
                     models.Booking.status == "attended",
-                    models.Booking.start_time >= cycle_start
+                    models.Booking.start_time >= start_of_today
                 ).count()
+                
+                used_today = sessions_used_totem + sessions_used_bookings
 
-                if used_additional >= total_allowed_additional:
-                    self.cv_engine.set_member_status(member.name, "SIN PASES")
-                    self.root.after(0, lambda: self.render_status_result(member.name, "SIN PASES", dni, f"0 de {total_allowed_additional} pases restantes\nen Plan Adicional"))
+                if status == "DEUDA":
+                    plan_info = f"• Mes Trascurriendo: {mes_str} {dia_actual}\n• Ingresos Hoy: {used_today}\n• Estado Adicional: Deuda"
+                    self.cv_engine.set_member_status(member.name, "DEUDA")
+                    self.root.after(0, lambda: self.render_status_result(member.name, "DEUDA", dni, plan_info))
                     return
 
-                start_window = now - datetime.timedelta(minutes=10)
-                end_window = now + datetime.timedelta(minutes=15)
-
+                # Registrar ingreso
+                now_time = datetime.datetime.utcnow()
+                start_of_today_utc = now_time.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_of_today_utc = start_of_today_utc + datetime.timedelta(days=1)
+                
+                # Try to find a confirmed booking for today
                 booking = db.query(models.Booking).filter(
                     models.Booking.member_id == member.id,
-                    models.Booking.status == "reserved",
-                    models.Booking.start_time >= start_window,
-                    models.Booking.start_time <= end_window
-                ).first()
-
+                    models.Booking.status == "confirmed",
+                    models.Booking.start_time >= start_of_today_utc,
+                    models.Booking.start_time < end_of_today_utc
+                ).order_by(models.Booking.start_time).first()
+                
                 if booking:
                     booking.status = "attended"
-                    db.commit()
-
-                    remaining_after = max(0, total_allowed_additional - (used_additional + 1))
-                    self.cv_engine.set_member_status(member.name, "ACTIVO")
-                    self.root.after(0, lambda: self.render_status_result(member.name, "ACTIVO", dni, f"Clase Confirmada:\n{booking.class_name}\n({remaining_after} pases restantes)"))
+                    booking.attended_at = now_time
                 else:
+                    plan_info = f"No tienes reservaciones\nde adicional para hoy"
                     self.cv_engine.set_member_status(member.name, "SIN RESERVA")
-                    self.root.after(0, lambda: self.render_status_result(member.name, "SIN RESERVA", dni, "No hay clases\nreservadas para ahora"))
+                    self.root.after(0, lambda: self.render_status_result(member.name, "SIN RESERVA", dni, plan_info))
+                    return
+
+                member.last_checkin = now_time
+                db.commit()
+
+                used_today += 1
+                
+                estado_texto = "Al Dia" if status == "ACTIVO" else "Por Vencer"
+                plan_info = f"• Mes Trascurriendo: {mes_str} {dia_actual}\n• Ingresos Hoy: {used_today}\n• Estado Adicional: {estado_texto}"
+                
+                # Display AL DIA if ACTIVO for the green success color
+                display_status = "AL DIA" if status == "ACTIVO" else status
+                self.cv_engine.set_member_status(member.name, status)
+                self.root.after(0, lambda: self.render_status_result(member.name, display_status, dni, plan_info))
             else:
                 self.root.after(0, lambda: self.render_status_result("ERROR", "NO EXISTE", dni, ""))
         except Exception as e:
