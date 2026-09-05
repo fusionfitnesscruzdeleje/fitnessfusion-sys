@@ -415,9 +415,9 @@ const fetchUserBookings = async (memberDni: string) => {
 
 
   const handleBookClass = async (scheduleId: number, className: string, classTime: string) => {
-    const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
-                         (userData.plan?.toLowerCase().includes('unificado')) ||
-                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional') || p.toLowerCase().includes('unificado')));
+    const hasAdicional = (userData?.membership_type?.toLowerCase().includes('adicional')) || 
+                         (userData?.membership_type?.toLowerCase().includes('unificado')) ||
+                         (userData?.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional') || p.toLowerCase().includes('unificado')));
     if (!hasAdicional) {
       showConfirm(
         "Plan Requerido",
@@ -455,9 +455,9 @@ const fetchUserBookings = async (memberDni: string) => {
   };
 
   const handleBookClassFromWeek = async (scheduleId: number, dateStr: string, className: string, classTime: string) => {
-    const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
-                         (userData.plan?.toLowerCase().includes('unificado')) ||
-                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional') || p.toLowerCase().includes('unificado')));
+    const hasAdicional = (userData?.membership_type?.toLowerCase().includes('adicional')) || 
+                         (userData?.membership_type?.toLowerCase().includes('unificado')) ||
+                         (userData?.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional') || p.toLowerCase().includes('unificado')));
     if (!hasAdicional) {
       showConfirm(
         "Plan Requerido",
