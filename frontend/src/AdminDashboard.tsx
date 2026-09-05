@@ -710,7 +710,7 @@ function AgendaModule({ members, API_URL }: any) {
                   <button onClick={() => {
                     if (window.confirm("¿Eliminar este horario de clase de forma permanente?")) {
                       handleDeleteClass(activeSchedule.id);
-                      setIsAttendanceModalOpen(false);
+                      setActiveSchedule(null);
                     }
                   }} className="text-[8px] font-black text-red-500 hover:text-white bg-red-500/10 hover:bg-red-500 px-2 py-1 rounded transition-colors">Eliminar</button>
                 </div>
