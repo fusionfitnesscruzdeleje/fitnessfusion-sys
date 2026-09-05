@@ -305,10 +305,10 @@ class GymDesktopKiosk:
                 start_of_today_utc = now_time.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_of_today_utc = start_of_today_utc + datetime.timedelta(days=1)
                 
-                # Try to find a confirmed booking for today
+                # Try to find a confirmed/reserved booking for today
                 booking = db.query(models.Booking).filter(
                     models.Booking.member_id == member.id,
-                    models.Booking.status == "confirmed",
+                    models.Booking.status.in_(["confirmed", "reserved"]),
                     models.Booking.start_time >= start_of_today_utc,
                     models.Booking.start_time < end_of_today_utc
                 ).order_by(models.Booking.start_time).first()
