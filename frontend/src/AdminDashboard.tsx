@@ -680,7 +680,13 @@ function AgendaModule({ members, API_URL }: any) {
                   <button onClick={async () => {
                     const targetDateStr = selectedDate;
                     await fetchClassBookings(activeSchedule.id, targetDateStr);
-                    await fetchSchedules();
+                    const res = await fetch(`${API_URL}/admin/class_schedules`);
+                    if (res.ok) {
+                      const data = await res.json();
+                      setSchedules(data);
+                      const freshActive = data.find((s: any) => s.id === activeSchedule.id);
+                      if (freshActive) setActiveSchedule(freshActive);
+                    }
                   }} className="text-[12px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">🔄</button>
                   <button onClick={() => {
                     handleDeleteClass(activeSchedule.id);

@@ -198,7 +198,8 @@ const fetchUserBookings = async (memberDni: string) => {
           plan: data.member.membership_type,
           routine: Array.isArray(data.member.routine) ? data.member.routine : [],
           streak: data.member.streak || 0,
-          streakMessage: data.member.streak_message || ""
+          streakMessage: data.member.streak_message || "",
+          additional_plans: data.member.additional_plans || []
         }));
       }
     } catch (e) {
@@ -312,7 +313,8 @@ const fetchUserBookings = async (memberDni: string) => {
           plan: data.member.membership_type,
           routine: loadedRoutine,
           streak: data.member.streak || 0,
-          streakMessage: data.member.streak_message || ""
+          streakMessage: data.member.streak_message || "",
+          additional_plans: data.member.additional_plans || []
         }));
         setIsAuthenticated(true);
 
@@ -414,7 +416,8 @@ const fetchUserBookings = async (memberDni: string) => {
 
   const handleBookClass = async (scheduleId: number, className: string, classTime: string) => {
     const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
-                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
+                         (userData.plan?.toLowerCase().includes('unificado')) ||
+                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional') || p.toLowerCase().includes('unificado')));
     if (!hasAdicional) {
       showConfirm(
         "Plan Requerido",
@@ -453,7 +456,8 @@ const fetchUserBookings = async (memberDni: string) => {
 
   const handleBookClassFromWeek = async (scheduleId: number, dateStr: string, className: string, classTime: string) => {
     const hasAdicional = (userData.plan?.toLowerCase().includes('adicional')) || 
-                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional')));
+                         (userData.plan?.toLowerCase().includes('unificado')) ||
+                         (userData.additional_plans && userData.additional_plans.some((p: string) => p.toLowerCase().includes('adicional') || p.toLowerCase().includes('unificado')));
     if (!hasAdicional) {
       showConfirm(
         "Plan Requerido",
