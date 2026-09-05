@@ -672,25 +672,47 @@ function AgendaModule({ members, API_URL }: any) {
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => {
-                    setNewClassData(activeSchedule);
+                    setNewClassData({
+                      name: activeSchedule.name,
+                      code: activeSchedule.code,
+                      day_of_week: activeSchedule.day_of_week,
+                      specific_date: activeSchedule.specific_date,
+                      start_time: activeSchedule.start_time,
+                      end_time: activeSchedule.end_time,
+                      color: activeSchedule.color,
+                      capacity: activeSchedule.capacity
+                    });
                     setClassDayMode(activeSchedule.specific_date ? 'specific' : 'recurrent');
                     setIsEditingClass(true);
                     setIsClassModalOpen(true);
                   }} className="text-[8px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">Editar</button>
                   <button onClick={async () => {
-                    const targetDateStr = selectedDate;
-                    await fetchClassBookings(activeSchedule.id, targetDateStr);
-                    const res = await fetch(`${API_URL}/admin/class_schedules`);
-                    if (res.ok) {
-                      const data = await res.json();
-                      setSchedules(data);
-                      const freshActive = data.find((s: any) => s.id === activeSchedule.id);
-                      if (freshActive) setActiveSchedule(freshActive);
+                    try {
+                      const targetDateStr = selectedDate;
+                      await fetchClassBookings(activeSchedule.id, targetDateStr);
+                      const res = await fetch(`${API_URL}/admin/class_schedules`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        setSchedules(data);
+                        const freshActive = data.find((s: any) => s.id === activeSchedule.id);
+                        if (freshActive) setActiveSchedule(freshActive);
+                        // Visual feedback to confirm refresh
+                        const btn = document.getElementById('refresh-btn');
+                        if (btn) {
+                          btn.style.transform = 'rotate(180deg)';
+                          setTimeout(() => btn.style.transform = 'rotate(0deg)', 300);
+                        }
+                      }
+                    } catch (e) {
+                      console.error(e);
                     }
-                  }} className="text-[12px] font-black text-gray-500 dark:text-white/30 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded">🔄</button>
+                  }} id="refresh-btn" style={{ transition: 'transform 0.3s ease' }} className="text-[12px] font-black text-blue-500 dark:text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-1 rounded">🔄</button>
                   <button onClick={() => {
-                    handleDeleteClass(activeSchedule.id);
-                  }} className="text-[8px] font-black text-red-500 hover:text-red-400 bg-red-500/10 hover:bg-red-500/20 px-2 py-1 rounded">Eliminar</button>
+                    if (window.confirm("¿Eliminar este horario de clase de forma permanente?")) {
+                      handleDeleteClass(activeSchedule.id);
+                      setIsAttendanceModalOpen(false);
+                    }
+                  }} className="text-[8px] font-black text-red-500 hover:text-white bg-red-500/10 hover:bg-red-500 px-2 py-1 rounded transition-colors">Eliminar</button>
                 </div>
               </div>
 
