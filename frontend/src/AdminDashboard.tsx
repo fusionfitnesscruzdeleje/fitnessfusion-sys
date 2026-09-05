@@ -194,7 +194,7 @@ function AgendaModule({ members, API_URL }: any) {
 
   const fetchClassBookings = async (scheduleId: number, fetchDateStr?: string) => {
     try {
-      const res = await fetch(`${API_URL}/admin/class_schedules/${scheduleId}/bookings?date=${fetchDateStr || selectedDate}`);
+      const res = await fetch(`${API_URL}/admin/class_schedules/${scheduleId}/bookings?date=${fetchDateStr || selectedDate}&t=${Date.now()}`);
       if (res.ok) setClassBookings(await res.json());
     } catch (e) { console.error(e); }
   };
