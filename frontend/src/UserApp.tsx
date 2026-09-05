@@ -93,8 +93,8 @@ export default function UserApp() {
       title,
       message,
       onConfirm: () => {
-        onConfirm();
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setTimeout(() => onConfirm(), 150);
       }
     });
   };
