@@ -966,7 +966,7 @@ const fetchUserBookings = async (memberDni: string) => {
                                                          showConfirm(
                                                            "Confirmar Reserva",
                                                            `¿Reservar clase de ${s.name} para el ${date.toLocaleDateString('es-AR')} a las ${s.start_time} HS?`,
-                                                           () => handleBookClassFromWeek(s.id, dateStr)
+                                                           () => handleBookClassFromWeek(s.id, dateStr, s.name, s.start_time)
                                                          );
                                                        }
                                                      }}
@@ -1054,7 +1054,7 @@ const fetchUserBookings = async (memberDni: string) => {
                                                          showConfirm(
                                                            "Confirmar Reserva",
                                                            `¿Reservar clase de ${s.name} para el ${date.toLocaleDateString('es-AR')} a las ${s.start_time} HS?`,
-                                                           () => handleBookClassFromWeek(s.id, dateStr)
+                                                           () => handleBookClassFromWeek(s.id, dateStr, s.name, s.start_time)
                                                          );
                                                        }
                                                      }}
@@ -1352,7 +1352,7 @@ const fetchUserBookings = async (memberDni: string) => {
                                 onClick={() => showConfirm(
                                   "Confirmar Reserva",
                                   `¿Deseas reservar la clase de ${s.name} para el día ${selectedDay} a las ${s.start_time} HS?`,
-                                  () => handleBookClass(s.id)
+                                  () => handleBookClass(s.id, s.name, s.start_time)
                                 )}
                                 disabled={s.bookings_count >= s.capacity}
                                 className="px-3 py-2 bg-green-500 text-white rounded-xl text-[8px] font-black uppercase disabled:opacity-50 whitespace-nowrap">
