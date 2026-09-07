@@ -2154,12 +2154,8 @@ export default function AdminDashboard() {
           <SidebarItem icon={<Users size={14} />} label="Socios" active={activeTab === 'Socios'} onClick={() => setActiveTab('Socios')} />
           <SidebarItem icon={<Settings size={14} />} label="Planes" active={activeTab === 'Planes'} onClick={() => setActiveTab('Planes')} />
           
-          {loggedUser?.id === 0 && (
-            <>
-              <SidebarItem icon={<img src="/ejercicio.png" alt="Ejercicios" className="w-4 h-4 opacity-50 dark:invert" />} label="Ejercicios" active={activeTab === 'Entrenamientos'} onClick={() => setActiveTab('Entrenamientos')} />
-              <SidebarItem icon={<Calendar size={14} />} label="Agenda" active={activeTab === 'Agenda'} onClick={() => setActiveTab('Agenda')} />
-            </>
-          )}
+          <SidebarItem icon={<img src="/ejercicio.png" alt="Ejercicios" className="w-4 h-4 opacity-50 dark:invert" />} label="Ejercicios" active={activeTab === 'Entrenamientos'} onClick={() => setActiveTab('Entrenamientos')} />
+          <SidebarItem icon={<Calendar size={14} />} label="Agenda" active={activeTab === 'Agenda'} onClick={() => setActiveTab('Agenda')} />
           
           {(userRole === 'gerente' || userRole === 'administracion') && (
             <>
@@ -2180,7 +2176,7 @@ export default function AdminDashboard() {
         </nav>
         <button onClick={() => { localStorage.removeItem('gym_session'); localStorage.removeItem('gym_role'); localStorage.removeItem('gym_user'); setIsAuthenticated(false); setLoggedUser(null); }} className="w-full p-2 bg-red-500/10 hover:bg-red-500 rounded-xl text-red-500 hover:text-black dark:hover:text-white text-[9px] font-black uppercase tracking-widest transition-all mt-4">Salir</button>
         <div className="mt-4 text-center text-[7px] font-black uppercase tracking-wider text-gray-400 dark:text-white/20 select-none">
-          Fusion Fitness OS v2.6 · 05/08/2026
+          Fusion Fitness OS<br/>Atlascore v3.0 &middot; 07/09/2026
         </div>
       </aside>
 
