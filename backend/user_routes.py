@@ -62,10 +62,19 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
     
     if member.joined_at and member.status != 'INACTIVO':
+        membership_type = (member.membership_type or "").upper()
+        validity_days = 30
+        if "TRIMESTRAL" in membership_type:
+            validity_days = 90
+        elif "SEMESTRAL" in membership_type:
+            validity_days = 180
+        elif "ANUAL" in membership_type:
+            validity_days = 365
+
         days_since = (datetime.datetime.utcnow() - member.joined_at).days
-        if days_since >= 30:
+        if days_since >= validity_days:
             member.status = 'DEUDA'
-        elif days_since >= 23:
+        elif days_since >= validity_days - 7:
             member.status = 'POR VENCER'
         else:
             member.status = 'ACTIVO'

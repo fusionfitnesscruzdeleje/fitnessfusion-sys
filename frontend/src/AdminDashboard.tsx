@@ -408,6 +408,9 @@ function AgendaModule({ members, API_URL }: any) {
         fetchSchedules();
         setIsClassModalOpen(false);
         setIsEditingClass(false);
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Error al guardar la clase");
       }
     } catch (e) { console.error(e); }
   };
@@ -673,6 +676,7 @@ function AgendaModule({ members, API_URL }: any) {
                 <div className="flex gap-1">
                   <button onClick={() => {
                     setNewClassData({
+                      id: activeSchedule.id,
                       name: activeSchedule.name,
                       code: activeSchedule.code,
                       day_of_week: activeSchedule.day_of_week,
