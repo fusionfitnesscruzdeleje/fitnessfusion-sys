@@ -45,6 +45,7 @@ function AgendaModule({ members, API_URL }: any) {
   });
   const [isNewActivityModalOpen, setIsNewActivityModalOpen] = useState(false);
   const [newActivityData, setNewActivityData] = useState({ name: '', code: '', color: '#ffffff' });
+  const [editingActivityId, setEditingActivityId] = useState<number | null>(null);
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -363,15 +364,22 @@ function AgendaModule({ members, API_URL }: any) {
 
   const handleNewActivitySubmit = async () => {
     try {
-      const res = await fetch(`${API_URL}/admin/activities`, {
-        method: 'POST',
+      const method = editingActivityId ? 'PUT' : 'POST';
+      const url = editingActivityId 
+        ? `${API_URL}/admin/activities/${editingActivityId}` 
+        : `${API_URL}/admin/activities`;
+        
+      const res = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newActivityData)
       });
       if (res.ok) {
         setIsNewActivityModalOpen(false);
         fetchActivities();
+        fetchSchedules();
         setNewActivityData({ name: '', code: '', color: '#ffffff' });
+        setEditingActivityId(null);
       }
     } catch (e) {
       console.error(e);
@@ -972,16 +980,24 @@ function AgendaModule({ members, API_URL }: any) {
                     </span>
                   </div>
                   {act.id && (
-                    <button onClick={() => handleDeleteActivity(act.id)} className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors" title="Eliminar Actividad">
-                      <Trash2 size={12} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => {
+                        setNewActivityData({ name: act.name, code: act.code, color: act.color });
+                        setEditingActivityId(act.id);
+                      }} className="text-blue-500 hover:bg-blue-500/10 p-1.5 rounded-lg transition-colors" title="Editar Actividad">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                      </button>
+                      <button onClick={() => handleDeleteActivity(act.id)} className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg transition-colors" title="Eliminar Actividad">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
             
             <div className="border-t border-gray-200 dark:border-white/10 pt-4 mb-4">
-              <h5 className="text-[10px] font-black uppercase text-gray-500 dark:text-white/40 tracking-wider">Crear Nueva Actividad</h5>
+              <h5 className="text-[10px] font-black uppercase text-gray-500 dark:text-white/40 tracking-wider">{editingActivityId ? "Editar Actividad" : "Crear Nueva Actividad"}</h5>
             </div>
             <div className="space-y-4">
               <div className="space-y-1">
@@ -1000,8 +1016,15 @@ function AgendaModule({ members, API_URL }: any) {
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
-                <button onClick={() => setIsNewActivityModalOpen(false)} className="flex-1 py-3 text-[9px] font-black uppercase text-gray-400">Cancelar</button>
-                <button onClick={handleNewActivitySubmit} className="flex-1 py-3 bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase">Crear Actividad</button>
+                <button onClick={() => {
+                  if (editingActivityId) {
+                    setEditingActivityId(null);
+                    setNewActivityData({ name: '', code: '', color: '#ffffff' });
+                  } else {
+                    setIsNewActivityModalOpen(false);
+                  }
+                }} className="flex-1 py-3 text-[9px] font-black uppercase text-gray-400">Cancelar</button>
+                <button onClick={handleNewActivitySubmit} className="flex-1 py-3 bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase">{editingActivityId ? "Guardar Cambios" : "Crear Actividad"}</button>
               </div>
             </div>
           </div>
