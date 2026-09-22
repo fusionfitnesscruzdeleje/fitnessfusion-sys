@@ -649,6 +649,40 @@ def create_activity(activity: schemas.ActivitySchema, db: Session = Depends(get_
     db.refresh(new_act)
     return new_act
 
+@router.put("/activities/{activity_id}")
+def update_activity(activity_id: int, activity_data: schemas.ActivitySchema, db: Session = Depends(get_db)):
+    act = db.query(models.Activity).filter(models.Activity.id == activity_id).first()
+    if not act:
+        raise HTTPException(status_code=404, detail="Actividad no encontrada")
+    
+    old_name = act.name
+    old_code = act.code
+    
+    act.name = activity_data.name
+    act.code = activity_data.code
+    act.color = activity_data.color
+    
+    # Update ClassSchedules
+    from sqlalchemy import or_
+    schedules = db.query(models.ClassSchedule).filter(
+        or_(models.ClassSchedule.name == old_name, models.ClassSchedule.code == old_code)
+    ).all()
+    for s in schedules:
+        s.name = activity_data.name
+        s.code = activity_data.code
+        s.color = activity_data.color
+        
+    # Update Bookings
+    bookings = db.query(models.Booking).filter(
+        models.Booking.class_name == old_name
+    ).all()
+    for b in bookings:
+        b.class_name = activity_data.name
+        
+    db.commit()
+    db.refresh(act)
+    return act
+
 @router.delete("/activities/{activity_id}")
 def delete_activity(activity_id: int, db: Session = Depends(get_db)):
     act = db.query(models.Activity).filter(models.Activity.id == activity_id).first()
