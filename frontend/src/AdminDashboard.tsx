@@ -380,9 +380,13 @@ function AgendaModule({ members, API_URL }: any) {
         fetchSchedules();
         setNewActivityData({ name: '', code: '', color: '#ffffff' });
         setEditingActivityId(null);
+      } else {
+        const text = await res.text();
+        alert(`Error al guardar: HTTP ${res.status} - ${text}`);
       }
     } catch (e) {
       console.error(e);
+      alert(`Error de red: ${e}`);
     }
   };
   
