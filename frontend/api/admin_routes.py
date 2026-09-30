@@ -53,9 +53,18 @@ def get_all_members(db: Session = Depends(get_db)):
         for m in members:
             if m.status != "INACTIVO" and m.joined_at:
                 days_since = (now - m.joined_at).days
-                if days_since >= 30:
+                plan = (m.membership_type or "").upper()
+                total_days = 30
+                if plan == "TRIMESTRAL":
+                    total_days = 90
+                elif plan == "SEMESTRAL":
+                    total_days = 180
+                elif plan == "ANUAL":
+                    total_days = 365
+                
+                if days_since >= total_days:
                     new_status = "DEUDA"
-                elif days_since >= 23:
+                elif days_since >= total_days - 7:
                     new_status = "POR VENCER"
                 else:
                     new_status = "ACTIVO"
@@ -128,9 +137,18 @@ def update_member(member_id: int, member_data: schemas.MemberCreate, db: Session
     joined = data['joined_at']
     if joined and data.get('status') != 'INACTIVO':
         days_since = (datetime.datetime.utcnow() - joined).days
-        if days_since >= 30:
+        plan = (data.get('membership_type') or db_member.membership_type or "").upper()
+        total_days = 30
+        if plan == "TRIMESTRAL":
+            total_days = 90
+        elif plan == "SEMESTRAL":
+            total_days = 180
+        elif plan == "ANUAL":
+            total_days = 365
+            
+        if days_since >= total_days:
             data['status'] = 'DEUDA'
-        elif days_since >= 23:
+        elif days_since >= total_days - 7:
             data['status'] = 'POR VENCER'
         else:
             data['status'] = 'ACTIVO'

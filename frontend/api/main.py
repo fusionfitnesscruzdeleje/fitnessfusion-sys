@@ -50,9 +50,18 @@ def get_member(dni: str, db: Session = Depends(get_db)):
     if member.status != "INACTIVO" and member.joined_at:
         now = datetime.datetime.utcnow()
         days_since = (now - member.joined_at).days
-        if days_since >= 30:
+        plan = (member.membership_type or "").upper()
+        total_days = 30
+        if plan == "TRIMESTRAL":
+            total_days = 90
+        elif plan == "SEMESTRAL":
+            total_days = 180
+        elif plan == "ANUAL":
+            total_days = 365
+            
+        if days_since >= total_days:
             new_status = "DEUDA"
-        elif days_since >= 23:
+        elif days_since >= total_days - 7:
             new_status = "POR VENCER"
         else:
             new_status = "ACTIVO"
