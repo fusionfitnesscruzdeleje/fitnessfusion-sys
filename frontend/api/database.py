@@ -21,6 +21,9 @@ if not DATABASE_URL:
         "DATABASE_URL=postgresql://usuario:clave@host/db?sslmode=require"
     )
 
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 # pool_pre_ping retries dead connections automatically at query time
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
