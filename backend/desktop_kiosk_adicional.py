@@ -67,9 +67,9 @@ class SplashScreen(ctk.CTkToplevel):
         self.geometry(f"+{x}+{y}")
 
         # Logo
-        logo_path = os.path.join(os.path.dirname(__file__), "logo_B.png")
+        logo_path = os.path.join(_BASE_DIR, "logo_B.png")
         if not os.path.exists(logo_path):
-            logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_B.png")
+            logo_path = os.path.join(_BASE_DIR, "logo_B.png")
         if os.path.exists(logo_path):
             logo_img = ctk.CTkImage(light_image=Image.open(logo_path),
                                     dark_image=Image.open(logo_path), size=(90, 90))
@@ -160,9 +160,9 @@ class GymDesktopKiosk:
 
         # Sidebar Elements
         # Logo en sidebar
-        logo_path = os.path.join(os.path.dirname(__file__), "logo_B.png")
+        logo_path = os.path.join(_BASE_DIR, "logo_B.png")
         if not os.path.exists(logo_path):
-            logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_B.png")
+            logo_path = os.path.join(_BASE_DIR, "logo_B.png")
         if os.path.exists(logo_path):
             logo_img = ctk.CTkImage(light_image=Image.open(logo_path),
                                     dark_image=Image.open(logo_path), size=(80, 80))
