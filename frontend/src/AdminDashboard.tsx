@@ -2413,8 +2413,14 @@ function SummaryCard({ title, value, icon, onClick, color }: any) {
   return <div onClick={onClick} className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/5 p-4 rounded-xl cursor-pointer hover:border-orange-500/20 transition-all flex justify-between items-center"><div className="space-y-1"><p className="text-[7px] font-black text-gray-500 dark:text-white/20 uppercase tracking-widest">{title}</p><p className="text-lg font-black text-black dark:text-white">{value}</p></div><div className={`${colors[color]} bg-white dark:bg-white/5 p-2 rounded-lg`}>{icon}</div></div>;
 }
 
-function memberDaysInfo(joinedAt: string, status: string): { daysIn: number; daysLeft: number; overdueDays: number } {
-  if (!joinedAt) return { daysIn: 0, daysLeft: 30, overdueDays: 0 };
+function memberDaysInfo(joinedAt: string, status: string, membershipType?: string): { daysIn: number; daysLeft: number; overdueDays: number; totalDays: number } {
+  const plan = (membershipType || '').toUpperCase();
+  let totalDays = 30;
+  if (plan.includes('TRIMESTRAL')) totalDays = 90;
+  else if (plan.includes('SEMESTRAL')) totalDays = 180;
+  else if (plan.includes('ANUAL')) totalDays = 365;
+
+  if (!joinedAt) return { daysIn: 0, daysLeft: totalDays, overdueDays: 0, totalDays };
   const joined = new Date(joinedAt);
   const today = new Date();
   
@@ -2425,18 +2431,18 @@ function memberDaysInfo(joinedAt: string, status: string): { daysIn: number; day
   const totalDaysSinceJoined = Math.round((d2.getTime() - d1.getTime()) / 86400000);
   
   if (totalDaysSinceJoined < 0) {
-    return { daysIn: 0, daysLeft: 30, overdueDays: 0 };
+    return { daysIn: 0, daysLeft: totalDays, overdueDays: 0, totalDays };
   }
   
   if (status === 'DEUDA') {
-    const lastCycleEnd = Math.floor(totalDaysSinceJoined / 30) * 30;
+    const lastCycleEnd = Math.floor(totalDaysSinceJoined / totalDays) * totalDays;
     const overdueDays = totalDaysSinceJoined - lastCycleEnd;
-    return { daysIn: 30, daysLeft: 0, overdueDays };
+    return { daysIn: totalDays, daysLeft: 0, overdueDays, totalDays };
   }
   
-  const daysIn = totalDaysSinceJoined % 30;
-  const daysLeft = 30 - daysIn;
-  return { daysIn, daysLeft, overdueDays: 0 };
+  const daysIn = totalDaysSinceJoined % totalDays;
+  const daysLeft = totalDays - daysIn;
+  return { daysIn, daysLeft, overdueDays: 0, totalDays };
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -2490,7 +2496,7 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {filteredMembers.map((m: any) => {
-          const { daysIn, daysLeft } = memberDaysInfo(m.joined_at, m.status);
+          const { daysIn, daysLeft, totalDays } = memberDaysInfo(m.joined_at, m.status, m.membership_type);
           return (
             <div key={m.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-orange-500/10 transition-all group overflow-hidden">
               <div className="flex items-start gap-3 mb-2">
@@ -2505,10 +2511,10 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
               </div>
               <div className="mb-3 px-1">
                 <p className="text-[7px] text-gray-400 dark:text-white/20 font-black uppercase">
-                  {`Día ${daysIn}/30 · ${daysLeft <= 0 ? '0d restantes para cobrar' : `${daysLeft}d restantes para cobrar`}`}
+                  {`Día ${daysIn}/${totalDays} · ${daysLeft <= 0 ? '0d restantes para cobrar' : `${daysLeft}d restantes para cobrar`}`}
                 </p>
                 <div className="w-full h-1 bg-gray-100 dark:bg-white/5 rounded-full mt-1 overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${m.status === 'DEUDA' ? 'bg-red-500' : m.status === 'POR VENCER' ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: m.status === 'DEUDA' ? '100%' : `${Math.min(100, (daysIn / 30) * 100)}%` }} />
+                  <div className={`h-full rounded-full transition-all ${m.status === 'DEUDA' ? 'bg-red-500' : m.status === 'POR VENCER' ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: m.status === 'DEUDA' ? '100%' : `${Math.min(100, (daysIn / totalDays) * 100)}%` }} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">

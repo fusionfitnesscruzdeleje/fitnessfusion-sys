@@ -30,11 +30,19 @@ def compute_status(member) -> str:
         return "INACTIVO"
     if not member.joined_at:
         return member.status
+        
+    plan = (member.membership_type or '').upper()
+    total_days = 30
+    if 'TRIMESTRAL' in plan: total_days = 90
+    elif 'SEMESTRAL' in plan: total_days = 180
+    elif 'ANUAL' in plan: total_days = 365
+    
     today = datetime.datetime.utcnow()
     days_since = (today - member.joined_at).days
-    if days_since >= 30:
+    
+    if days_since >= total_days:
         return "DEUDA"
-    elif days_since >= 23:
+    elif days_since >= (total_days - 7):
         return "POR VENCER"
     return "ACTIVO"
 
@@ -256,13 +264,19 @@ class GymDesktopKiosk:
                     db.commit()
 
                 # Calculate plan info
+                plan_name = (member.membership_type or '').upper()
+                total_days = 30
+                if 'TRIMESTRAL' in plan_name: total_days = 90
+                elif 'SEMESTRAL' in plan_name: total_days = 180
+                elif 'ANUAL' in plan_name: total_days = 365
+                
                 plan = db.query(models.Plan).filter(models.Plan.name == member.membership_type, models.Plan.is_active == True).first()
                 days_per_week = plan.days_per_week if plan else 3
                 total_sessions = days_per_week * 4
 
                 today = datetime.datetime.utcnow()
                 days_since = (today - member.joined_at).days if member.joined_at else 0
-                days_left = max(0, 30 - days_since)
+                days_left = max(0, total_days - days_since)
 
                 cycle_start = member.joined_at.replace(hour=0, minute=0, second=0, microsecond=0) if member.joined_at else today
                 sessions_used_totem = db.query(models.Checkin).filter(
@@ -283,6 +297,21 @@ class GymDesktopKiosk:
                 hist_str = "\n\nÚltimos ingresos:\n" + "\n".join([f"{d.strftime('%d/%m %H:%M')} ({t})" for d, t in all_hist]) if all_hist else "\n\nÚltimos ingresos: Ninguno"
 
                 # Block conditions
+                is_only_adicional = True
+                if member.membership_type and "ADICIONAL" not in member.membership_type.upper() and "UNIFICADO" not in member.membership_type.upper():
+                    is_only_adicional = False
+                if member.additional_plans:
+                    for p in member.additional_plans:
+                        if "ADICIONAL" not in p.upper() and "UNIFICADO" not in p.upper():
+                            is_only_adicional = False
+                
+                # If they only have Adicional plans, they cannot enter the main gym.
+                if is_only_adicional:
+                    plan_info = f"{member.membership_type or 'Plan'}\nAcceso Denegado\nPlan Exclusivo de Adicional"
+                    self.cv_engine.set_member_status(member.name, "SIN ACCESO")
+                    self.root.after(0, lambda: self.render_status_result(member.name, "SIN ACCESO", dni, plan_info))
+                    return
+
                 if status == "INACTIVO":
                     sessions_remaining = max(0, total_sessions - sessions_used)
                     plan_info = f"{member.membership_type or 'Plan'}\n{sessions_remaining} pases disponibles\nSocio Inactivo" + hist_str
@@ -347,6 +376,10 @@ class GymDesktopKiosk:
             color = "#ffcc00"
             bg = "#262200"
             threading.Thread(target=lambda: winsound.Beep(600, 800)).start()
+        elif status == "SIN ACCESO":
+            color = "#ff8800"
+            bg = "#261300"
+            threading.Thread(target=self.trigger_alarm_sound).start()
 
         self.status_box.configure(fg_color=bg, border_color=color)
         self.status_label.configure(text=status, text_color=color)

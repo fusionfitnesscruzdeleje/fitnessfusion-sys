@@ -28,11 +28,19 @@ def compute_status(member) -> str:
         return "INACTIVO"
     if not member.joined_at:
         return member.status
+        
+    plan = (member.membership_type or '').upper()
+    total_days = 30
+    if 'TRIMESTRAL' in plan: total_days = 90
+    elif 'SEMESTRAL' in plan: total_days = 180
+    elif 'ANUAL' in plan: total_days = 365
+    
     today = datetime.datetime.utcnow()
     days_since = (today - member.joined_at).days
-    if days_since >= 30:
+    
+    if days_since >= total_days:
         return "DEUDA"
-    elif days_since >= 23:
+    elif days_since >= (total_days - 7):
         return "POR VENCER"
     return "ACTIVO"
 
@@ -356,6 +364,10 @@ class GymDesktopKiosk:
             color = "#ffcc00"
             bg = "#262200"
             threading.Thread(target=lambda: winsound.Beep(600, 800)).start()
+        elif status == "SIN RESERVA":
+            color = "#ff8800"
+            bg = "#261300"
+            threading.Thread(target=self.trigger_alarm_sound).start()
         else:
             # For DEUDA, SIN PASES, INACTIVO, NO EXISTE, DB ERROR
             threading.Thread(target=self.trigger_alarm_sound).start()
