@@ -11,6 +11,10 @@ from database import engine, get_db
 import admin_routes
 import user_routes
 import totem_routes
+try:
+    from .whatsapp_service import notify_member_status_change
+except ImportError:
+    from whatsapp_service import notify_member_status_change
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -79,9 +83,11 @@ def get_member(dni: str, db: Session = Depends(get_db)):
             new_status = "ACTIVO"
         
         if member.status != new_status:
+            old_st = member.status
             member.status = new_status
             db.commit()
             db.refresh(member)
+            notify_member_status_change(member, old_st, new_status, db)
 
     # Logic for access control
     cv_engine.set_member_status(member.name, member.status)

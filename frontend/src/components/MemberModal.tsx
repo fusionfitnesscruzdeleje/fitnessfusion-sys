@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import ProgressChart from './ProgressChart';
+import WhatsAppIcon from './WhatsAppIcon';
 
 export default function MemberModal({ member, plans, API_URL, onSave, onClose }: any) {
   const [activeTab, setActiveTab] = useState<'datos' | 'entrenamiento' | 'progreso'>('datos');
@@ -112,7 +113,30 @@ export default function MemberModal({ member, plans, API_URL, onSave, onClose }:
                  <input type="text" placeholder="DNI" className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl p-4 text-black dark:text-white text-xs" value={formData?.dni || ''} onChange={e => setFormData({...formData, dni: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                 <input type="text" placeholder="WhatsApp / Número" className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl p-4 text-black dark:text-white text-xs" value={formData?.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                 <div className="relative flex items-center">
+                    <span className="absolute left-3.5 text-green-500 pointer-events-none">
+                      <WhatsAppIcon size={16} className="fill-green-500" />
+                    </span>
+                    <input 
+                      type="text" 
+                      placeholder="WhatsApp / Celular" 
+                      className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl p-4 pl-10 pr-20 text-black dark:text-white text-xs" 
+                      value={formData?.phone || ''} 
+                      onChange={e => setFormData({...formData, phone: e.target.value})} 
+                    />
+                    {formData?.phone && (
+                      <a
+                        href={`https://wa.me/${formData.phone.replace(/\D/g, '').startsWith('54') ? formData.phone.replace(/\D/g, '') : '549' + formData.phone.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Chatear por WhatsApp con ${formData.name || 'Socio'}`}
+                        className="absolute right-3 px-2.5 py-1.5 bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm"
+                      >
+                        <WhatsAppIcon size={12} className="fill-current" />
+                        <span>Chat</span>
+                      </a>
+                    )}
+                 </div>
                  <input type="email" placeholder="Correo Electrónico" className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl p-4 text-black dark:text-white text-xs" value={formData?.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
               </div>
               <div className="space-y-1">

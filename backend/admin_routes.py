@@ -1,11 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from .database import get_db
-from . import models
-from . import schemas
+from database import get_db
+import models
+import schemas
 from typing import List
 import datetime
 from sqlalchemy import func
+try:
+    from .whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
+except ImportError:
+    from whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -69,8 +73,10 @@ def get_all_members(db: Session = Depends(get_db)):
                 new_status = "ACTIVO"
             
             if m.status != new_status:
+                old_status = m.status
                 m.status = new_status
                 updated = True
+                notify_member_status_change(m, old_status, new_status, db)
     if updated:
         db.commit()
 
@@ -121,6 +127,7 @@ def update_member(member_id: int, member_data: schemas.MemberCreate, db: Session
     if not db_member:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    old_status = db_member.status
     data = member_data.dict()
     if not data.get('email'):
         data['email'] = None
@@ -152,6 +159,8 @@ def update_member(member_id: int, member_data: schemas.MemberCreate, db: Session
 
     db.commit()
     db.refresh(db_member)
+    if db_member.status != old_status:
+        notify_member_status_change(db_member, old_status, db_member.status, db)
     return db_member
 
 @router.get("/members/{member_id}/checkins")
@@ -232,8 +241,11 @@ def update_member_status(member_id: int, status: str, db: Session = Depends(get_
     member = db.query(models.Member).get(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+    old_status = member.status
     member.status = status
     db.commit()
+    if old_status != status:
+        notify_member_status_change(member, old_status, status, db)
     return {"status": "updated", "new_status": status}
 
 @router.post("/payments")
@@ -271,9 +283,12 @@ def record_payment(member_id: int, amount: float = 0, method: str = "card", proc
         created_at=now
     )
     db.add(payment)
+    old_status = member.status
     member.status = "ACTIVO"
     member.joined_at = now
     db.commit()
+    if old_status and old_status != "ACTIVO":
+        notify_member_status_change(member, old_status, "ACTIVO", db)
     return {"status": "payment recorded", "amount": final_amount, "details": plan_details}
 
 @router.delete("/payments/{payment_id}")
@@ -284,6 +299,17 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db)):
     db.delete(payment)
     db.commit()
     return {"status": "deleted"}
+
+@router.get("/whatsapp/status")
+def get_whatsapp_gateway_status():
+    """Consulta el estado en vivo de la pasarela y la sesión de WhatsApp."""
+    return check_gateway_status()
+
+@router.post("/whatsapp/send-test")
+def send_test_whatsapp(phone: str, message: str = "Mensaje de prueba desde Fusion Fitness"):
+    """Permite enviar un mensaje de WhatsApp directo a un número para comprobar la conexión."""
+    success = dispatch_whatsapp_message(phone, message)
+    return {"success": success, "target": phone, "message": message}
 
 @router.get("/pricing/dynamic")
 def calculate_dynamic_price(db: Session = Depends(get_db)):

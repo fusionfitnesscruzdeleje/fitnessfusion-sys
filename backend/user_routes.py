@@ -5,6 +5,10 @@ from database import get_db
 import models
 import schemas
 import datetime
+try:
+    from .whatsapp_service import notify_member_status_change
+except ImportError:
+    from whatsapp_service import notify_member_status_change
 
 router = APIRouter(prefix="/user", tags=["User"])
 
@@ -71,6 +75,7 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
         elif "ANUAL" in membership_type:
             validity_days = 365
 
+        old_status = member.status
         days_since = (datetime.datetime.utcnow() - member.joined_at).days
         if days_since >= validity_days:
             member.status = 'DEUDA'
@@ -79,6 +84,8 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
         else:
             member.status = 'ACTIVO'
         db.commit()
+        if member.status != old_status:
+            notify_member_status_change(member, old_status, member.status, db)
         
     streak_count, streak_msg = calculate_member_streak_and_message(member.id, db)
     return {
