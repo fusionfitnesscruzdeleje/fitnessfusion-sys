@@ -76,13 +76,36 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
             validity_days = 365
 
         old_status = member.status
-        days_since = (datetime.datetime.utcnow() - member.joined_at).days
-        if days_since >= validity_days:
-            member.status = 'DEUDA'
-        elif days_since >= validity_days - 7:
-            member.status = 'POR VENCER'
+        now = datetime.datetime.utcnow()
+        wellness = member.wellness_data or {}
+        next_due_str = wellness.get("next_due_date")
+        if next_due_str:
+            try:
+                due_date = datetime.datetime.strptime(next_due_str[:10], "%Y-%m-%d").date()
+                today_date = now.date()
+                days_until_due = (due_date - today_date).days
+                if days_until_due < 0:
+                    member.status = 'DEUDA'
+                elif days_until_due <= 7:
+                    member.status = 'POR VENCER'
+                else:
+                    member.status = 'ACTIVO'
+            except Exception:
+                days_since = (now - member.joined_at).days
+                if days_since >= validity_days:
+                    member.status = 'DEUDA'
+                elif days_since >= validity_days - 7:
+                    member.status = 'POR VENCER'
+                else:
+                    member.status = 'ACTIVO'
         else:
-            member.status = 'ACTIVO'
+            days_since = (now - member.joined_at).days
+            if days_since >= validity_days:
+                member.status = 'DEUDA'
+            elif days_since >= validity_days - 7:
+                member.status = 'POR VENCER'
+            else:
+                member.status = 'ACTIVO'
         db.commit()
         if member.status != old_status:
             notify_member_status_change(member, old_status, member.status, db)

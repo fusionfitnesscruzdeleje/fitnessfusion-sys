@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models
 import schemas
-from typing import List
+from typing import List, Optional
 import datetime
 from sqlalchemy import func
+from sqlalchemy.orm.attributes import flag_modified
 try:
     from .whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
 except ImportError:
@@ -64,13 +65,36 @@ def get_all_members(db: Session = Depends(get_db)):
             elif "ANUAL" in membership_type:
                 validity_days = 365
 
-            days_since = (now - m.joined_at).days
-            if days_since >= validity_days:
-                new_status = "DEUDA"
-            elif days_since >= validity_days - 7:
-                new_status = "POR VENCER"
+            wellness = m.wellness_data or {}
+            next_due_str = wellness.get("next_due_date")
+            new_status = m.status
+            if next_due_str:
+                try:
+                    due_date = datetime.datetime.strptime(next_due_str[:10], "%Y-%m-%d").date()
+                    today_date = now.date()
+                    days_until_due = (due_date - today_date).days
+                    if days_until_due < 0:
+                        new_status = "DEUDA"
+                    elif days_until_due <= 7:
+                        new_status = "POR VENCER"
+                    else:
+                        new_status = "ACTIVO"
+                except Exception:
+                    days_since = (now - m.joined_at).days
+                    if days_since >= validity_days:
+                        new_status = "DEUDA"
+                    elif days_since >= validity_days - 7:
+                        new_status = "POR VENCER"
+                    else:
+                        new_status = "ACTIVO"
             else:
-                new_status = "ACTIVO"
+                days_since = (now - m.joined_at).days
+                if days_since >= validity_days:
+                    new_status = "DEUDA"
+                elif days_since >= validity_days - 7:
+                    new_status = "POR VENCER"
+                else:
+                    new_status = "ACTIVO"
             
             if m.status != new_status:
                 old_status = m.status
@@ -249,7 +273,17 @@ def update_member_status(member_id: int, status: str, db: Session = Depends(get_
     return {"status": "updated", "new_status": status}
 
 @router.post("/payments")
-def record_payment(member_id: int, amount: float = 0, method: str = "card", processed_by: str = "", db: Session = Depends(get_db)):
+def record_payment(
+    member_id: int, 
+    amount: float = 0, 
+    method: str = "card", 
+    processed_by: str = "",
+    billing_day: Optional[int] = None,
+    next_due_date: Optional[str] = None,
+    keep_fixed_billing_day: Optional[bool] = False,
+    fixed_due_day: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     member = db.query(models.Member).get(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -285,11 +319,45 @@ def record_payment(member_id: int, amount: float = 0, method: str = "card", proc
     db.add(payment)
     old_status = member.status
     member.status = "ACTIVO"
-    member.joined_at = now
+
+    wellness = dict(member.wellness_data or {})
+
+    membership_type = (member.membership_type or "").upper()
+    validity_days = 30
+    if "TRIMESTRAL" in membership_type:
+        validity_days = 90
+    elif "SEMESTRAL" in membership_type:
+        validity_days = 180
+    elif "ANUAL" in membership_type:
+        validity_days = 365
+
+    target_fixed_day = fixed_due_day or billing_day
+    if keep_fixed_billing_day and target_fixed_day:
+        wellness["keep_fixed_billing_day"] = True
+        wellness["fixed_due_day"] = int(target_fixed_day)
+    elif keep_fixed_billing_day is False:
+        wellness["keep_fixed_billing_day"] = False
+
+    if next_due_date:
+        try:
+            target_due = datetime.datetime.strptime(next_due_date[:10], "%Y-%m-%d")
+            wellness["next_due_date"] = target_due.strftime("%Y-%m-%d")
+            member.joined_at = target_due - datetime.timedelta(days=validity_days)
+        except Exception:
+            member.joined_at = now
+    else:
+        member.joined_at = now
+
+    member.wellness_data = wellness
+    try:
+        flag_modified(member, "wellness_data")
+    except Exception:
+        pass
+
     db.commit()
     if old_status and old_status != "ACTIVO":
         notify_member_status_change(member, old_status, "ACTIVO", db)
-    return {"status": "payment recorded", "amount": final_amount, "details": plan_details}
+    return {"status": "payment recorded", "amount": final_amount, "details": plan_details, "next_due_date": wellness.get("next_due_date")}
 
 @router.delete("/payments/{payment_id}")
 def delete_payment(payment_id: int, db: Session = Depends(get_db)):

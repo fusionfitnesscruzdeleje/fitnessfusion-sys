@@ -1737,21 +1737,36 @@ export default function AdminDashboard() {
     } catch (e) { console.error(e); }
   };
 
-  const handlePayment = async (amount: number, method: string) => {
+  const handlePayment = async (amount: number, method: string, billingDetails?: any) => {
     try {
       const processedBy = encodeURIComponent(loggedUser?.name || 'Administración');
-      const res = await fetch(`${API_URL}/admin/payments?member_id=${selectedItem.id}&amount=${amount}&method=${method}&processed_by=${processedBy}`, {
+      let url = `${API_URL}/admin/payments?member_id=${selectedItem.id}&amount=${amount}&method=${method}&processed_by=${processedBy}`;
+      if (billingDetails) {
+        if (billingDetails.billingDay !== undefined && billingDetails.billingDay !== null) {
+          url += `&billing_day=${billingDetails.billingDay}`;
+        }
+        if (billingDetails.nextDueDate) {
+          url += `&next_due_date=${encodeURIComponent(billingDetails.nextDueDate)}`;
+        }
+        if (billingDetails.keepFixedDay !== undefined && billingDetails.keepFixedDay !== null) {
+          url += `&keep_fixed_billing_day=${billingDetails.keepFixedDay}`;
+        }
+        if (billingDetails.fixedDay !== undefined && billingDetails.fixedDay !== null) {
+          url += `&fixed_due_day=${billingDetails.fixedDay}`;
+        }
+      }
+      const res = await fetch(url, {
         method: 'POST'
       });
       if (res.ok) {
-        generatePaymentPDF(selectedItem, amount, method, loggedUser?.name || 'Administración');
+        generatePaymentPDF(selectedItem, amount, method, loggedUser?.name || 'Administración', undefined, billingDetails?.nextDueDate);
         setIsPaymentModalOpen(false);
         refreshData();
       }
     } catch (e) { console.error(e); }
   };
 
-  const generatePaymentPDF = async (member: any, amount: number, method: string, staffName: string, customDate?: string) => {
+  const generatePaymentPDF = async (member: any, amount: number, method: string, staffName: string, customDate?: string, nextDueDate?: string) => {
     const doc = new jsPDF();
 
     const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
@@ -1786,19 +1801,22 @@ export default function AdminDashboard() {
 
     const contractedPlansStr = [member.membership_type || 'Musculación', ...(member.additional_plans || [])].join(' + ');
 
+    const tableRows = [
+      ['Nombre Completo', member.name || '-'],
+      ['DNI', member.dni || '-'],
+      ['Correo Electrónico', member.email || '-'],
+      ['Número de Teléfono', member.phone || '-'],
+      ['Planes Contratados', contractedPlansStr],
+      ['Monto Total Abonado', `$${amount.toLocaleString()}`],
+      ['Medio de Pago Utilizado', method || '-'],
+      ['Usuario del Sistema', staffName || '-'],
+      ...(nextDueDate ? [['Próximo Vencimiento', nextDueDate]] : []),
+    ];
+
     autoTable(doc, {
       startY: 55,
       head: [['Detalle', 'Información']],
-      body: [
-        ['Nombre Completo', member.name || '-'],
-        ['DNI', member.dni || '-'],
-        ['Correo Electrónico', member.email || '-'],
-        ['Número de Teléfono', member.phone || '-'],
-        ['Planes Contratados', contractedPlansStr],
-        ['Monto Total Abonado', `$${amount.toLocaleString()}`],
-        ['Medio de Pago Utilizado', method || '-'],
-        ['Usuario del Sistema', staffName || '-'],
-      ],
+      body: tableRows,
       theme: 'grid',
       headStyles: { fillColor: [249, 115, 22] },
     });
@@ -2271,6 +2289,49 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
   const defaultTotal = (mainPlanObj?.price || 0) + addPlanObjs.reduce((acc: number, curr: any) => acc + (curr?.price || 0), 0);
   const [amount, setAmount] = useState(defaultTotal);
 
+  // Billing date & fixed recurring day state
+  const today = new Date();
+  const currentDay = today.getDate();
+  const existingFixedDay = member?.wellness_data?.fixed_due_day;
+  const initialKeepFixed = Boolean(member?.wellness_data?.keep_fixed_billing_day);
+
+  // Helper to project the next due date based on a day of month and plan duration
+  const getProjectedDueDate = (dayNumber: number, planType?: string) => {
+    const now = new Date();
+    let monthsToAdd = 1;
+    const p = (planType || member?.membership_type || '').toUpperCase();
+    if (p.includes('TRIMESTRAL')) monthsToAdd = 3;
+    else if (p.includes('SEMESTRAL')) monthsToAdd = 6;
+    else if (p.includes('ANUAL')) monthsToAdd = 12;
+
+    const targetYear = now.getFullYear();
+    const targetMonth = now.getMonth() + monthsToAdd;
+    const maxDays = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const validDay = Math.min(Math.max(1, dayNumber), maxDays);
+    const targetDate = new Date(targetYear, targetMonth, validDay);
+    const yyyy = targetDate.getFullYear();
+    const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(targetDate.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const initialBillingDay = existingFixedDay ? Number(existingFixedDay) : currentDay;
+  const [billingDay, setBillingDay] = useState<number>(initialBillingDay);
+  const [keepFixedDay, setKeepFixedDay] = useState<boolean>(initialKeepFixed);
+  const [fixedDay, setFixedDay] = useState<number>(initialBillingDay);
+  const [nextDueDate, setNextDueDate] = useState<string>(() => {
+    return getProjectedDueDate(initialBillingDay, member?.membership_type);
+  });
+
+  const handlePayClick = () => {
+    onPay(amount, method, {
+      billingDay,
+      nextDueDate,
+      keepFixedDay,
+      fixedDay: keepFixedDay ? (fixedDay || billingDay) : null
+    });
+  };
+
   return (
     <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-white/10 p-10 rounded-[40px] w-full max-w-md shadow-3xl animate-in zoom-in duration-300">
       <h2 className="text-xl font-black mb-2 uppercase tracking-widest text-green-500 text-center">Facturación en Recepción</h2>
@@ -2311,7 +2372,90 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
             </div>
          </div>
 
-         <div className="flex gap-4 pt-4 border-t border-gray-200 dark:border-white/5"><button className="flex-1 py-4 text-gray-600 dark:text-white/40 font-black uppercase text-[10px]" onClick={onClose}>Cancelar</button><button className="flex-1 py-4 bg-green-600 rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-green-600/20" onClick={()=>onPay(amount, method)}>Generar Pago</button></div>
+         {/* Sección: Fecha de Cobro, Próximo Cobro y Día Fijo */}
+         <div className="bg-gray-50 dark:bg-black/40 p-4 rounded-2xl border border-gray-200 dark:border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-white/40">
+                Programación de Cobro
+              </label>
+              {keepFixedDay && (
+                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                  Día {billingDay} Fijo
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Fecha de cobro (Día del mes) */}
+              <div className="space-y-1">
+                <span className="text-[8px] text-gray-400 dark:text-white/30 uppercase font-black">
+                  Fecha de cobro (Día)
+                </span>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={billingDay}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      const clamped = Math.min(31, Math.max(1, val));
+                      setBillingDay(clamped);
+                      if (keepFixedDay) setFixedDay(clamped);
+                      setNextDueDate(getProjectedDueDate(clamped, member?.membership_type));
+                    }}
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-black text-black dark:text-white outline-none focus:border-green-500"
+                    placeholder="Ej: 23"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-400 dark:text-white/30 pointer-events-none">
+                    de c/ mes
+                  </span>
+                </div>
+              </div>
+
+              {/* Selector Próximo cobro */}
+              <div className="space-y-1">
+                <span className="text-[8px] text-gray-400 dark:text-white/30 uppercase font-black flex items-center gap-1">
+                  <Calendar size={11} className="text-green-500" /> Próximo cobro
+                </span>
+                <input
+                  type="date"
+                  value={nextDueDate}
+                  onChange={(e) => setNextDueDate(e.target.value)}
+                  className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-black dark:text-white outline-none focus:border-green-500"
+                />
+              </div>
+            </div>
+
+            {/* Checklist: Mantener dia de cobro para siempre */}
+            <label className="flex items-start gap-2.5 pt-1 cursor-pointer select-none group">
+              <input
+                type="checkbox"
+                checked={keepFixedDay}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setKeepFixedDay(checked);
+                  if (checked) {
+                    setFixedDay(billingDay);
+                  }
+                }}
+                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-green-500 focus:ring-green-500 cursor-pointer accent-green-500 shrink-0"
+              />
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase text-gray-700 dark:text-white/80 group-hover:text-green-400 transition-colors">
+                  Mantener día de cobro para siempre
+                </span>
+                <span className="text-[7.5px] text-gray-400 dark:text-white/30 leading-tight">
+                  Mantiene el día {billingDay} como fecha límite permanente, sin importar si paga después del vencimiento.
+                </span>
+              </div>
+            </label>
+         </div>
+
+         <div className="flex gap-4 pt-4 border-t border-gray-200 dark:border-white/5">
+           <button className="flex-1 py-4 text-gray-600 dark:text-white/40 font-black uppercase text-[10px]" onClick={onClose}>Cancelar</button>
+           <button className="flex-1 py-4 bg-green-600 rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-green-600/20 text-white" onClick={handlePayClick}>Generar Pago</button>
+         </div>
       </div>
     </div>
   );
@@ -2424,12 +2568,34 @@ function SummaryCard({ title, value, icon, onClick, color }: any) {
   return <div onClick={onClick} className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/5 p-4 rounded-xl cursor-pointer hover:border-orange-500/20 transition-all flex justify-between items-center"><div className="space-y-1"><p className="text-[7px] font-black text-gray-500 dark:text-white/20 uppercase tracking-widest">{title}</p><p className="text-lg font-black text-black dark:text-white">{value}</p></div><div className={`${colors[color]} bg-white dark:bg-white/5 p-2 rounded-lg`}>{icon}</div></div>;
 }
 
-function memberDaysInfo(joinedAt: string, status: string, membershipType?: string): { daysIn: number; daysLeft: number; overdueDays: number; totalDays: number } {
+function memberDaysInfo(joinedAt: string, status: string, membershipType?: string, wellnessData?: any): { daysIn: number; daysLeft: number; overdueDays: number; totalDays: number } {
   const plan = (membershipType || '').toUpperCase();
   let totalDays = 30;
   if (plan.includes('TRIMESTRAL')) totalDays = 90;
   else if (plan.includes('SEMESTRAL')) totalDays = 180;
   else if (plan.includes('ANUAL')) totalDays = 365;
+
+  if (wellnessData && wellnessData.next_due_date) {
+    try {
+      const today = new Date();
+      const dToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const parts = wellnessData.next_due_date.split('T')[0].split('-');
+      const dDue = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      const diffTime = dDue.getTime() - dToday.getTime();
+      const diffDays = Math.round(diffTime / 86400000);
+
+      if (diffDays < 0) {
+        const overdueDays = Math.abs(diffDays);
+        return { daysIn: totalDays, daysLeft: 0, overdueDays, totalDays };
+      } else {
+        const daysLeft = diffDays;
+        const daysIn = Math.max(0, Math.min(totalDays, totalDays - daysLeft));
+        return { daysIn, daysLeft, overdueDays: 0, totalDays };
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   if (!joinedAt) return { daysIn: 0, daysLeft: totalDays, overdueDays: 0, totalDays };
   const joined = new Date(joinedAt);
@@ -2507,7 +2673,8 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {filteredMembers.map((m: any) => {
-          const { daysIn, daysLeft, totalDays } = memberDaysInfo(m.joined_at, m.status, m.membership_type);
+          const { daysIn, daysLeft, totalDays } = memberDaysInfo(m.joined_at, m.status, m.membership_type, m.wellness_data);
+          const hasFixedDay = m.wellness_data?.keep_fixed_billing_day && m.wellness_data?.fixed_due_day;
           return (
             <div key={m.id} className="p-4 bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-orange-500/10 transition-all group overflow-hidden">
               <div className="flex items-start gap-3 mb-2">
@@ -2535,6 +2702,11 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     <span className="text-[8px] text-gray-500 dark:text-white/20 uppercase font-black truncate">{m.membership_type || '—'}</span>
                     <StatusBadge status={m.status} />
+                    {hasFixedDay && (
+                      <span className="text-[7px] font-black px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 uppercase tracking-wide border border-blue-500/20" title={`Día ${m.wellness_data.fixed_due_day} fijo de cobro permanente`}>
+                        Día {m.wellness_data.fixed_due_day} Fijo
+                      </span>
+                    )}
                   </div>
                   {m.phone && (
                     <div className="flex items-center gap-1 mt-1 text-[8px] font-bold text-gray-400 dark:text-white/30">
@@ -2545,9 +2717,14 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
                 </div>
               </div>
               <div className="mb-3 px-1">
-                <p className="text-[7px] text-gray-400 dark:text-white/20 font-black uppercase">
-                  {`Día ${daysIn}/${totalDays} · ${daysLeft <= 0 ? '0d restantes para cobrar' : `${daysLeft}d restantes para cobrar`}`}
-                </p>
+                <div className="flex justify-between items-center text-[7px] font-black uppercase text-gray-400 dark:text-white/20">
+                  <span>{`Día ${daysIn}/${totalDays} · ${daysLeft <= 0 ? '0d restantes' : `${daysLeft}d restantes`}`}</span>
+                  {m.wellness_data?.next_due_date && (
+                    <span className="text-gray-400 dark:text-white/40 font-semibold" title="Fecha del próximo vencimiento">
+                      Vence: {m.wellness_data.next_due_date.split('T')[0]}
+                    </span>
+                  )}
+                </div>
                 <div className="w-full h-1 bg-gray-100 dark:bg-white/5 rounded-full mt-1 overflow-hidden">
                   <div className={`h-full rounded-full transition-all ${m.status === 'DEUDA' ? 'bg-red-500' : m.status === 'POR VENCER' ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: m.status === 'DEUDA' ? '100%' : `${Math.min(100, (daysIn / totalDays) * 100)}%` }} />
                 </div>

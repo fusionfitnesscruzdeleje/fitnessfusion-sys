@@ -74,13 +74,35 @@ def get_member(dni: str, db: Session = Depends(get_db)):
         elif "ANUAL" in membership_type:
             validity_days = 365
 
-        days_since = (now - member.joined_at).days
-        if days_since >= validity_days:
-            new_status = "DEUDA"
-        elif days_since >= validity_days - 7:
-            new_status = "POR VENCER"
+        wellness = member.wellness_data or {}
+        next_due_str = wellness.get("next_due_date")
+        if next_due_str:
+            try:
+                due_date = datetime.datetime.strptime(next_due_str[:10], "%Y-%m-%d").date()
+                today_date = now.date()
+                days_until_due = (due_date - today_date).days
+                if days_until_due < 0:
+                    new_status = "DEUDA"
+                elif days_until_due <= 7:
+                    new_status = "POR VENCER"
+                else:
+                    new_status = "ACTIVO"
+            except Exception:
+                days_since = (now - member.joined_at).days
+                if days_since >= validity_days:
+                    new_status = "DEUDA"
+                elif days_since >= validity_days - 7:
+                    new_status = "POR VENCER"
+                else:
+                    new_status = "ACTIVO"
         else:
-            new_status = "ACTIVO"
+            days_since = (now - member.joined_at).days
+            if days_since >= validity_days:
+                new_status = "DEUDA"
+            elif days_since >= validity_days - 7:
+                new_status = "POR VENCER"
+            else:
+                new_status = "ACTIVO"
         
         if member.status != new_status:
             old_st = member.status
