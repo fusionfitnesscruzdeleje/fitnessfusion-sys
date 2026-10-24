@@ -2005,7 +2005,7 @@ export default function AdminDashboard() {
 
       {/* Portaled Modals (Centered in Viewport) */}
       {(isModalOpen || isPaymentModalOpen) && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-10 bg-black/50 dark:bg-black/90 backdrop-blur-md overflow-y-auto">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-black/50 dark:bg-black/90 backdrop-blur-md overflow-y-auto">
           {isModalOpen && (
             <div className={`bg-white dark:bg-neutral-900 border border-gray-200 dark:border-white/10 p-8 rounded-[40px] w-full ${modalType === 'workout' || modalType === 'history' ? 'max-w-4xl' : 'max-w-md'} shadow-2xl animate-in zoom-in duration-300`}>
               <div className="flex justify-between items-center mb-6"><h2 className="text-lg font-black uppercase tracking-widest text-orange-500">{modalType}</h2><button onClick={() => setIsModalOpen(false)}><X size={20} className="text-gray-400 hover:text-black dark:text-white/20 dark:hover:text-white transition-colors"/></button></div>
@@ -2333,14 +2333,27 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
   };
 
   return (
-    <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-white/10 p-10 rounded-[40px] w-full max-w-md shadow-3xl animate-in zoom-in duration-300">
-      <h2 className="text-xl font-black mb-2 uppercase tracking-widest text-green-500 text-center">Facturación en Recepción</h2>
-      <p className="text-[10px] text-gray-500 dark:text-white/20 text-center uppercase font-black mb-6">Socio: {member.name}</p>
+    <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-white/10 p-5 sm:p-6 rounded-3xl w-full max-w-md shadow-3xl animate-in zoom-in duration-300 max-h-[90vh] flex flex-col my-auto relative">
+      {/* Header fijo con botón cerrar */}
+      <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-white/10 shrink-0">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base sm:text-lg font-black uppercase tracking-widest text-green-500 truncate">Facturación en Recepción</h2>
+          <p className="text-[10px] text-gray-500 dark:text-white/30 uppercase font-black truncate">Socio: {member.name}</p>
+        </div>
+        <button 
+          onClick={onClose} 
+          className="p-1.5 rounded-xl text-gray-400 hover:text-black dark:text-white/30 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all shrink-0 ml-2" 
+          title="Cerrar modal"
+        >
+          <X size={18} />
+        </button>
+      </div>
       
-      <div className="space-y-5">
+      {/* Contenido scrolleable */}
+      <div className="overflow-y-auto custom-scrollbar flex-1 py-3.5 space-y-3.5 pr-1 -mr-1">
          {/* Desglose de planes contratados */}
-         <div className="bg-gray-50 dark:bg-black/40 p-4 rounded-2xl border border-gray-200 dark:border-white/10 space-y-2">
-            <p className="text-[9px] font-black uppercase text-gray-400 dark:text-white/40 tracking-wider">Desglose de Cobro:</p>
+         <div className="bg-gray-50 dark:bg-black/40 p-3 rounded-2xl border border-gray-200 dark:border-white/10 space-y-1.5">
+            <p className="text-[8px] font-black uppercase text-gray-400 dark:text-white/40 tracking-wider">Desglose de Cobro:</p>
             <div className="flex justify-between text-xs font-bold text-black dark:text-white">
                <span>Plan Principal ({mainPlanObj?.name || member.membership_type})</span>
                <span>${mainPlanObj?.price?.toLocaleString() || 0}</span>
@@ -2351,44 +2364,51 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
                  <span>${ap.price?.toLocaleString() || 0}</span>
               </div>
             ))}
-            <div className="border-t border-gray-200 dark:border-white/10 pt-2 flex justify-between text-sm font-black text-green-500">
+            <div className="border-t border-gray-200 dark:border-white/10 pt-1.5 flex justify-between text-xs sm:text-sm font-black text-green-500">
                <span>Total Sugerido</span>
                <span>${defaultTotal.toLocaleString()}</span>
             </div>
          </div>
 
-         <div className="space-y-2">
-            <label className="text-[9px] text-gray-500 dark:text-white/20 uppercase font-black ml-4">Monto Final a Cobrar</label>
-            <input type="number" className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl p-4 text-2xl font-black text-black dark:text-white text-center outline-none focus:border-green-500" value={amount} onChange={e => setAmount(parseInt(e.target.value) || 0)} />
+         {/* Monto Final a Cobrar */}
+         <div className="space-y-1">
+            <label className="text-[8px] text-gray-500 dark:text-white/20 uppercase font-black ml-2">Monto Final a Cobrar</label>
+            <input 
+              type="number" 
+              className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl py-2.5 px-3 text-xl font-black text-black dark:text-white text-center outline-none focus:border-green-500" 
+              value={amount} 
+              onChange={e => setAmount(parseInt(e.target.value) || 0)} 
+            />
          </div>
 
-         <div className="space-y-2">
-            <label className="text-[9px] text-gray-500 dark:text-white/20 uppercase font-black ml-4">Método de Pago</label>
+         {/* Método de Pago */}
+         <div className="space-y-1">
+            <label className="text-[8px] text-gray-500 dark:text-white/20 uppercase font-black ml-2">Método de Pago</label>
             <div className="grid grid-cols-2 gap-2">
-               <PaymentBtn active={method === 'Efectivo'} onClick={()=>setMethod('Efectivo')} label="Efectivo" icon={<Banknote size={16}/>} />
-               <PaymentBtn active={method === 'Tarjeta'} onClick={()=>setMethod('Tarjeta')} label="Tarjeta" icon={<CreditCard size={16}/>} />
-               <PaymentBtn active={method === 'Transferencia'} onClick={()=>setMethod('Transferencia')} label="Transferencia" icon={<Smartphone size={16}/>} />
-               <PaymentBtn active={method === 'QR'} onClick={()=>setMethod('QR')} label="QR" icon={<Smartphone size={16}/>} />
+               <PaymentBtn active={method === 'Efectivo'} onClick={()=>setMethod('Efectivo')} label="Efectivo" icon={<Banknote size={15}/>} />
+               <PaymentBtn active={method === 'Tarjeta'} onClick={()=>setMethod('Tarjeta')} label="Tarjeta" icon={<CreditCard size={15}/>} />
+               <PaymentBtn active={method === 'Transferencia'} onClick={()=>setMethod('Transferencia')} label="Transferencia" icon={<Smartphone size={15}/>} />
+               <PaymentBtn active={method === 'QR'} onClick={()=>setMethod('QR')} label="QR" icon={<Smartphone size={15}/>} />
             </div>
          </div>
 
          {/* Sección: Fecha de Cobro, Próximo Cobro y Día Fijo */}
-         <div className="bg-gray-50 dark:bg-black/40 p-4 rounded-2xl border border-gray-200 dark:border-white/10 space-y-3">
+         <div className="bg-gray-50 dark:bg-black/40 p-3.5 rounded-2xl border border-gray-200 dark:border-white/10 space-y-2.5">
             <div className="flex items-center justify-between">
-              <label className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-white/40">
+              <label className="text-[8px] font-black uppercase tracking-wider text-gray-500 dark:text-white/40">
                 Programación de Cobro
               </label>
               {keepFixedDay && (
-                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                <span className="text-[7.5px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/25">
                   Día {billingDay} Fijo
                 </span>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {/* Fecha de cobro (Día del mes) */}
               <div className="space-y-1">
-                <span className="text-[8px] text-gray-400 dark:text-white/30 uppercase font-black">
+                <span className="text-[7.5px] text-gray-400 dark:text-white/30 uppercase font-black">
                   Fecha de cobro (Día)
                 </span>
                 <div className="relative">
@@ -2404,10 +2424,10 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
                       if (keepFixedDay) setFixedDay(clamped);
                       setNextDueDate(getProjectedDueDate(clamped, member?.membership_type));
                     }}
-                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-black text-black dark:text-white outline-none focus:border-green-500"
+                    className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 text-xs font-black text-black dark:text-white outline-none focus:border-green-500"
                     placeholder="Ej: 23"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-400 dark:text-white/30 pointer-events-none">
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-bold text-gray-400 dark:text-white/30 pointer-events-none">
                     de c/ mes
                   </span>
                 </div>
@@ -2415,20 +2435,20 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
 
               {/* Selector Próximo cobro */}
               <div className="space-y-1">
-                <span className="text-[8px] text-gray-400 dark:text-white/30 uppercase font-black flex items-center gap-1">
-                  <Calendar size={11} className="text-green-500" /> Próximo cobro
+                <span className="text-[7.5px] text-gray-400 dark:text-white/30 uppercase font-black flex items-center gap-1">
+                  <Calendar size={10} className="text-green-500" /> Próximo cobro
                 </span>
                 <input
                   type="date"
                   value={nextDueDate}
                   onChange={(e) => setNextDueDate(e.target.value)}
-                  className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-black dark:text-white outline-none focus:border-green-500"
+                  className="w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 text-xs font-bold text-black dark:text-white outline-none focus:border-green-500"
                 />
               </div>
             </div>
 
             {/* Checklist: Mantener dia de cobro para siempre */}
-            <label className="flex items-start gap-2.5 pt-1 cursor-pointer select-none group">
+            <label className="flex items-start gap-2 pt-0.5 cursor-pointer select-none group">
               <input
                 type="checkbox"
                 checked={keepFixedDay}
@@ -2439,23 +2459,34 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
                     setFixedDay(billingDay);
                   }
                 }}
-                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-green-500 focus:ring-green-500 cursor-pointer accent-green-500 shrink-0"
+                className="w-3.5 h-3.5 mt-0.5 rounded border-gray-300 text-green-500 focus:ring-green-500 cursor-pointer accent-green-500 shrink-0"
               />
               <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase text-gray-700 dark:text-white/80 group-hover:text-green-400 transition-colors">
+                <span className="text-[8.5px] font-black uppercase text-gray-700 dark:text-white/80 group-hover:text-green-400 transition-colors">
                   Mantener día de cobro para siempre
                 </span>
-                <span className="text-[7.5px] text-gray-400 dark:text-white/30 leading-tight">
+                <span className="text-[7px] text-gray-400 dark:text-white/30 leading-tight">
                   Mantiene el día {billingDay} como fecha límite permanente, sin importar si paga después del vencimiento.
                 </span>
               </div>
             </label>
          </div>
+      </div>
 
-         <div className="flex gap-4 pt-4 border-t border-gray-200 dark:border-white/5">
-           <button className="flex-1 py-4 text-gray-600 dark:text-white/40 font-black uppercase text-[10px]" onClick={onClose}>Cancelar</button>
-           <button className="flex-1 py-4 bg-green-600 rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-green-600/20 text-white" onClick={handlePayClick}>Generar Pago</button>
-         </div>
+      {/* Botones de acción fijos al pie */}
+      <div className="flex gap-3 pt-3 mt-1 border-t border-gray-200 dark:border-white/10 shrink-0">
+        <button 
+          className="flex-1 py-2.5 text-gray-600 dark:text-white/50 hover:text-black dark:hover:text-white font-black uppercase text-[10px] rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition-all" 
+          onClick={onClose}
+        >
+          Cancelar
+        </button>
+        <button 
+          className="flex-1 py-2.5 bg-green-600 hover:bg-green-500 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-green-600/20 text-white transition-all" 
+          onClick={handlePayClick}
+        >
+          Generar Pago
+        </button>
       </div>
     </div>
   );
@@ -2463,8 +2494,8 @@ function PaymentModal({ plans, member, onPay, onClose }: any) {
 
 function PaymentBtn({ active, onClick, label, icon }: any) {
   return (
-    <button onClick={onClick} className={`flex items-center justify-center gap-3 p-4 rounded-xl border transition-all ${active ? 'bg-green-600 border-green-400 text-black dark:text-white shadow-lg' : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500 dark:text-white/20 hover:text-black dark:text-white'}`}>
-       {icon}<span className="text-[10px] font-black uppercase">{label}</span>
+    <button onClick={onClick} className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all ${active ? 'bg-green-600 border-green-400 text-black dark:text-white shadow-lg' : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500 dark:text-white/20 hover:text-black dark:text-white'}`}>
+       {icon}<span className="text-[9px] font-black uppercase">{label}</span>
     </button>
   );
 }
