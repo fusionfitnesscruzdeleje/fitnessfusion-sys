@@ -118,7 +118,11 @@ def notify_member_status_change(member, old_status: str, new_status: str, db=Non
 
     message = get_whatsapp_status_message(st, member_name=getattr(member, "name", None))
     target_phone = (getattr(member, "phone", None) or os.getenv("VITE_WHATSAPP_PHONE") or os.getenv("WHATSAPP_PHONE") or "").strip()
+    target_email = (getattr(member, "email", None) or "").strip()
 
+    dispatched_any = False
+
+    # 1. Enviar WhatsApp en segundo plano
     if target_phone:
         logger.info(f"[WHATSAPP QUEUED] Disparando hilo para notificar a {getattr(member, 'name', 'Socio')} (+{target_phone}) -> Estado: {st}")
         threading.Thread(
@@ -126,8 +130,24 @@ def notify_member_status_change(member, old_status: str, new_status: str, db=Non
             args=(target_phone, message),
             daemon=True
         ).start()
-        return True
-    return False
+        dispatched_any = True
+
+    # 2. Enviar Correo Electrónico en paralelo si tiene email registrado
+    if target_email and "@" in target_email:
+        try:
+            try:
+                from .email_service import send_member_status_email
+            except Exception:
+                from email_service import send_member_status_email
+            
+            next_due = wellness.get("next_due_date")
+            logger.info(f"[EMAIL QUEUED] Disparando correo en paralelo a {getattr(member, 'name', 'Socio')} ({target_email}) -> Estado: {st}")
+            send_member_status_email(member, st, next_due_date=next_due)
+            dispatched_any = True
+        except Exception as e:
+            logger.error(f"[EMAIL SERVICE ERROR] No se pudo despachar correo a {target_email}: {e}")
+
+    return dispatched_any
 
 def check_gateway_status() -> dict:
     """Verifica el estado del gateway y de la sesión de WhatsApp."""

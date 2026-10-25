@@ -8,7 +8,8 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  Browsers
 } = require('@whiskeysockets/baileys');
 
 const app = express();
@@ -28,6 +29,19 @@ let currentQRDataUrl = null;
 let connectedUser = null;
 let isConnecting = false;
 
+// Almacenamiento en memoria para responder peticiones de reintento de descifrado Signal (E2EE retry requests)
+// Esto soluciona definitivamente el cartel "Esperando el mensaje. Esto puede demorar un poco."
+const messageStore = new Map();
+
+function storeMessage(keyId, message) {
+  if (!keyId || !message) return;
+  messageStore.set(keyId, message);
+  if (messageStore.size > 2000) {
+    const oldestKey = messageStore.keys().next().value;
+    messageStore.delete(oldestKey);
+  }
+}
+
 async function startWhatsApp() {
   if (isConnecting) return;
   isConnecting = true;
@@ -40,8 +54,17 @@ async function startWhatsApp() {
       version,
       auth: state,
       logger: pino({ level: 'silent' }),
-      browser: [`${GYM_NAME} OS`, 'Chrome', '1.0.0'],
-      syncFullHistory: false
+      browser: Browsers.windows('Desktop'),
+      syncFullHistory: false,
+      // Implementación obligatoria de getMessage para reenvío de claves en reintentos
+      getMessage: async (key) => {
+        if (key && key.id && messageStore.has(key.id)) {
+          return messageStore.get(key.id);
+        }
+        return {
+          conversation: 'Notificación de ' + GYM_NAME
+        };
+      }
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -108,7 +131,6 @@ function authenticate(req, res, next) {
 
   const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '') : (queryToken || bodyToken);
 
-  // If token is provided, validate it. If not configured or matched, allow.
   if (API_TOKEN && token && token !== API_TOKEN) {
     return res.status(401).json({ error: 'Token no autorizado' });
   }
@@ -127,7 +149,45 @@ app.get('/status', (req, res) => {
   });
 });
 
-// Send Message Endpoint (Compatible with backend/admin_routes.py)
+// Endpoint para reiniciar sesión limpia y generar nuevas claves criptográficas
+app.all(['/relink', '/reset-session'], async (req, res) => {
+  try {
+    console.log('\n[WHATSAPP] >> Solicitud de re-vinculación/renovación de sesión recibida. Purgando credenciales desfasadas...');
+    if (sock) {
+      try { sock.end(); } catch (e) {}
+      sock = null;
+    }
+    isConnected = false;
+    currentQR = null;
+    currentQRDataUrl = null;
+    connectedUser = null;
+    isConnecting = false;
+    messageStore.clear();
+
+    try {
+      if (fs.existsSync(AUTH_DIR)) {
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        console.log('[WHATSAPP] Carpeta auth_info limpiada exitosamente.');
+      }
+    } catch (e) {
+      console.error('[WHATSAPP] Advertencia limpiando auth_info:', e);
+    }
+
+    setTimeout(() => {
+      startWhatsApp();
+    }, 1000);
+
+    if (req.xhr || req.headers.accept?.includes('json')) {
+      return res.json({ success: true, message: 'Sesión reiniciada con éxito. Por favor escanea el nuevo código QR.' });
+    }
+    return res.redirect('/');
+  } catch (err) {
+    console.error('[WHATSAPP RELINK ERROR]:', err);
+    return res.status(500).send('Error reiniciando sesión: ' + err.message);
+  }
+});
+
+// Send Message Endpoint (Compatible con backend y Argentina 54 vs 549)
 app.post('/send', authenticate, async (req, res) => {
   try {
     const rawTo = req.body.to || req.body.phone || req.body.recipient;
@@ -147,20 +207,51 @@ app.post('/send', authenticate, async (req, res) => {
       });
     }
 
-    // Sanitize phone number digits
+    // Normalizar dígitos
     let cleanPhone = String(rawTo).replace(/[^0-9]/g, '');
 
-    // Normalize Argentina format: 54 + 9 + area + number
-    if (cleanPhone.startsWith('54') && !cleanPhone.startsWith('549') && cleanPhone.length === 12) {
-      cleanPhone = '549' + cleanPhone.slice(2);
-    } else if (cleanPhone.startsWith('351') && cleanPhone.length === 10) {
-      cleanPhone = '549' + cleanPhone;
+    // Generar candidatos de Argentina (con 9 y sin 9) para resolver el JID exacto y canónico
+    const candidates = [];
+    if (cleanPhone.startsWith('549')) {
+      candidates.push(cleanPhone);
+      candidates.push('54' + cleanPhone.slice(3));
+    } else if (cleanPhone.startsWith('54')) {
+      candidates.push('549' + cleanPhone.slice(2));
+      candidates.push(cleanPhone);
+    } else if (cleanPhone.startsWith('9') && cleanPhone.length === 11) {
+      candidates.push('54' + cleanPhone);
+      candidates.push('54' + cleanPhone.slice(1));
+    } else if (cleanPhone.length === 10) {
+      candidates.push('549' + cleanPhone);
+      candidates.push('54' + cleanPhone);
+    } else {
+      candidates.push(cleanPhone);
     }
 
-    const jid = `${cleanPhone}@s.whatsapp.net`;
+    let targetJid = null;
+    for (const cand of candidates) {
+      try {
+        const [lookup] = await sock.onWhatsApp(cand);
+        if (lookup && lookup.exists && lookup.jid) {
+          targetJid = lookup.jid;
+          console.log(`[WHATSAPP ON_WHATSAPP] Número verificado: ${cand} -> JID Canónico: ${targetJid}`);
+          break;
+        }
+      } catch (e) {}
+    }
 
-    console.log(`[WHATSAPP DISPATCH] Enviando a: ${cleanPhone}...`);
-    const sent = await sock.sendMessage(jid, { text: String(message) });
+    if (!targetJid) {
+      targetJid = `${candidates[0]}@s.whatsapp.net`;
+      console.log(`[WHATSAPP FALLBACK] JID no verificado directamente, usando: ${targetJid}`);
+    }
+
+    console.log(`[WHATSAPP DISPATCH] Enviando mensaje a ${targetJid}...`);
+    const sent = await sock.sendMessage(targetJid, { text: String(message) });
+
+    // Guardar en el almacén de mensajes para resolver retry requests futuros
+    if (sent && sent.key && sent.key.id) {
+      storeMessage(sent.key.id, sent.message);
+    }
 
     console.log(`[WHATSAPP SENT] Mensaje entregado con ID: ${sent.key.id}`);
 
@@ -168,7 +259,7 @@ app.post('/send', authenticate, async (req, res) => {
       success: true,
       status: 'sent',
       messageId: sent.key.id,
-      to: cleanPhone,
+      to: targetJid,
       timestamp: new Date().toISOString()
     });
   } catch (err) {
@@ -332,7 +423,11 @@ app.get(['/', '/qr'], (req, res) => {
           Iniciando sesión y generando código QR... Por favor aguarda unos segundos.
         </div>
       `}
-    `}
+    <div style="margin: 20px 0 10px 0;">
+      <a href="/relink" onclick="return confirm('¿Deseas reiniciar la sesión y generar un nuevo código QR limpio?')" style="display: inline-block; background: #dc2626; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3); transition: all 0.2s;">
+        🔄 Re-vincular / Renovar Sesión
+      </a>
+    </div>
 
     <div class="token-box">
       <b>Token de API:</b> ${API_TOKEN}

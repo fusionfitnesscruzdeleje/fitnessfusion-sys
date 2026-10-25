@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, User, Brain, DollarSign, Lock, ShieldCheck, Briefcase, Download, CheckCircle, XCircle, Trash2, X, Settings, Receipt, CreditCard, Smartphone, Banknote, Search, Moon, Sun, AlertTriangle , Calendar, Clock, Info } from 'lucide-react';
+import { LayoutDashboard, Users, User, Brain, DollarSign, Lock, ShieldCheck, Briefcase, Download, CheckCircle, XCircle, Trash2, X, Settings, Receipt, CreditCard, Smartphone, Banknote, Search, Moon, Sun, AlertTriangle , Calendar, Clock, Info, Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -12,7 +12,11 @@ import WhatsAppIcon from './components/WhatsAppIcon';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-function AgendaModule({ members, API_URL }: any) {
+const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+  ? "http://localhost:8000" 
+  : "/api";
+
+function AgendaModule({ members }: any) {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -2713,22 +2717,45 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-1">
                     <p className="font-black text-black dark:text-white text-[10px] uppercase break-words leading-tight">{m.name}</p>
-                    {m.phone ? (
-                      <a 
-                        href={`https://wa.me/${m.phone.replace(/\D/g, '').startsWith('54') ? m.phone.replace(/\D/g, '') : '549' + m.phone.replace(/\D/g, '')}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        title={`Enviar WhatsApp a ${m.phone}`}
-                        className="p-1 rounded-md text-green-500 hover:bg-green-500/10 hover:scale-110 transition-all shrink-0"
-                      >
-                        <WhatsAppIcon size={14} className="fill-green-500" />
-                      </a>
-                    ) : (
-                      <span title="Sin WhatsApp registrado" className="p-1 text-gray-300 dark:text-white/10 shrink-0">
-                        <WhatsAppIcon size={14} className="fill-current" />
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {m.phone ? (
+                        <a 
+                          href={`https://wa.me/${m.phone.replace(/\D/g, '').startsWith('54') ? m.phone.replace(/\D/g, '') : '549' + m.phone.replace(/\D/g, '')}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Disparar en paralelo la notificación por API (correo electrónico y/o WhatsApp)
+                            fetch(`${API_URL}/admin/members/${m.id}/notify`, { method: 'POST' }).catch(() => {});
+                          }}
+                          title={`Abrir WhatsApp y notificar en paralelo por correo a ${m.phone}`}
+                          className="p-1 rounded-md text-green-500 hover:bg-green-500/10 hover:scale-110 transition-all shrink-0"
+                        >
+                          <WhatsAppIcon size={14} className="fill-green-500" />
+                        </a>
+                      ) : (
+                        <span title="Sin WhatsApp registrado" className="p-1 text-gray-300 dark:text-white/10 shrink-0">
+                          <WhatsAppIcon size={14} className="fill-current" />
+                        </span>
+                      )}
+
+                      {m.email && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetch(`${API_URL}/admin/members/${m.id}/notify`, { method: 'POST' })
+                              .then(r => r.json())
+                              .then(() => alert(`¡Correo enviado a ${m.name} (${m.email})!`))
+                              .catch(() => alert('Error enviando correo'));
+                          }}
+                          title={`Enviar correo de estado a ${m.email}`}
+                          className="p-1 rounded-md text-orange-400 hover:bg-orange-500/10 hover:scale-110 transition-all shrink-0"
+                        >
+                          <Mail size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                     <span className="text-[8px] text-gray-500 dark:text-white/20 uppercase font-black truncate">{m.membership_type || '—'}</span>
@@ -2743,6 +2770,12 @@ function MembersModule({ members, onEdit, onDelete, onAddClick, onPayClick, onHi
                     <div className="flex items-center gap-1 mt-1 text-[8px] font-bold text-gray-400 dark:text-white/30">
                       <WhatsAppIcon size={9} className="fill-green-500 shrink-0" />
                       <span className="truncate">{m.phone}</span>
+                    </div>
+                  )}
+                  {m.email && (
+                    <div className="flex items-center gap-1 mt-0.5 text-[8px] font-bold text-gray-400 dark:text-white/30 truncate" title={m.email}>
+                      <Mail size={9} className="text-orange-400 shrink-0" />
+                      <span className="truncate">{m.email}</span>
                     </div>
                   )}
                 </div>

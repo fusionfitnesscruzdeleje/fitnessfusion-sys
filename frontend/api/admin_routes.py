@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from .database import get_db
-from . import models
-from . import schemas
-from typing import List
+from database import get_db
+import models
+import schemas
+from typing import List, Optional
 import datetime
 from sqlalchemy import func
+from sqlalchemy.orm.attributes import flag_modified
+try:
+    from .whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
+except ImportError:
+    from whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -46,56 +51,76 @@ def get_gym_stats(db: Session = Depends(get_db)):
 
 @router.get("/members", response_model=List[schemas.MemberSchema])
 def get_all_members(db: Session = Depends(get_db)):
-    try:
-        members = db.query(models.Member).all()
-        now = datetime.datetime.utcnow()
-        updated = False
-        for m in members:
-            if m.status != "INACTIVO" and m.joined_at:
+    members = db.query(models.Member).all()
+    now = datetime.datetime.utcnow()
+    updated = False
+    for m in members:
+        if m.status != "INACTIVO" and m.joined_at:
+            membership_type = (m.membership_type or "").upper()
+            validity_days = 30
+            if "TRIMESTRAL" in membership_type:
+                validity_days = 90
+            elif "SEMESTRAL" in membership_type:
+                validity_days = 180
+            elif "ANUAL" in membership_type:
+                validity_days = 365
+
+            wellness = m.wellness_data or {}
+            next_due_str = wellness.get("next_due_date")
+            new_status = m.status
+            if next_due_str:
+                try:
+                    due_date = datetime.datetime.strptime(next_due_str[:10], "%Y-%m-%d").date()
+                    today_date = now.date()
+                    days_until_due = (due_date - today_date).days
+                    if days_until_due < 0:
+                        new_status = "DEUDA"
+                    elif days_until_due <= 7:
+                        new_status = "POR VENCER"
+                    else:
+                        new_status = "ACTIVO"
+                except Exception:
+                    days_since = (now - m.joined_at).days
+                    if days_since >= validity_days:
+                        new_status = "DEUDA"
+                    elif days_since >= validity_days - 7:
+                        new_status = "POR VENCER"
+                    else:
+                        new_status = "ACTIVO"
+            else:
                 days_since = (now - m.joined_at).days
-                plan = (m.membership_type or "").upper()
-                total_days = 30
-                if plan == "TRIMESTRAL":
-                    total_days = 90
-                elif plan == "SEMESTRAL":
-                    total_days = 180
-                elif plan == "ANUAL":
-                    total_days = 365
-                
-                if days_since >= total_days:
+                if days_since >= validity_days:
                     new_status = "DEUDA"
-                elif days_since >= total_days - 7:
+                elif days_since >= validity_days - 7:
                     new_status = "POR VENCER"
                 else:
                     new_status = "ACTIVO"
-                
-                if m.status != new_status:
-                    m.status = new_status
-                    updated = True
-        if updated:
-            db.commit()
+            
+            if m.status != new_status:
+                old_status = m.status
+                m.status = new_status
+                updated = True
+                notify_member_status_change(m, old_status, new_status, db)
+    if updated:
+        db.commit()
 
-        result = []
-        for m in members:
-            # Convert to dict first to avoid Pydantic mutability constraints
-            m_dict = schemas.MemberSchema.from_orm(m).dict()
-            m_dict["billing_history"] = [
-                {
-                    "id": p.id,
-                    "date": p.created_at.strftime("%Y-%m-%d") if p.created_at else "",
-                    "amount": p.amount,
-                    "plan": m.membership_type or "Musculación",
-                    "method": p.method,
-                    "processed_by": p.stripe_id or "—",
-                    "status": "PAGADO"
-                } for p in sorted(m.payments, key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
-            ]
-            result.append(m_dict)
-        return result
-    except Exception as e:
-        import traceback
-        error_msg = traceback.format_exc()
-        raise HTTPException(status_code=500, detail=error_msg)
+    result = []
+    for m in members:
+        # Convert to dict first to avoid Pydantic mutability constraints
+        m_dict = schemas.MemberSchema.from_orm(m).dict()
+        m_dict["billing_history"] = [
+            {
+                "id": p.id,
+                "date": p.created_at.strftime("%Y-%m-%d"),
+                "amount": p.amount,
+                "plan": m.membership_type or "Musculación",
+                "method": p.method,
+                "processed_by": p.stripe_id or "—",
+                "status": "PAGADO"
+            } for p in sorted(m.payments, key=lambda x: x.created_at, reverse=True)
+        ]
+        result.append(m_dict)
+    return result
 
 @router.post("/members", response_model=schemas.MemberSchema)
 def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
@@ -126,6 +151,7 @@ def update_member(member_id: int, member_data: schemas.MemberCreate, db: Session
     if not db_member:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    old_status = db_member.status
     data = member_data.dict()
     if not data.get('email'):
         data['email'] = None
@@ -136,19 +162,19 @@ def update_member(member_id: int, member_data: schemas.MemberCreate, db: Session
     # Recalculate status from joined_at so editing the start date reflects correctly
     joined = data['joined_at']
     if joined and data.get('status') != 'INACTIVO':
+        membership_type = (data.get('membership_type') or db_member.membership_type or "").upper()
+        validity_days = 30
+        if "TRIMESTRAL" in membership_type:
+            validity_days = 90
+        elif "SEMESTRAL" in membership_type:
+            validity_days = 180
+        elif "ANUAL" in membership_type:
+            validity_days = 365
+
         days_since = (datetime.datetime.utcnow() - joined).days
-        plan = (data.get('membership_type') or db_member.membership_type or "").upper()
-        total_days = 30
-        if plan == "TRIMESTRAL":
-            total_days = 90
-        elif plan == "SEMESTRAL":
-            total_days = 180
-        elif plan == "ANUAL":
-            total_days = 365
-            
-        if days_since >= total_days:
+        if days_since >= validity_days:
             data['status'] = 'DEUDA'
-        elif days_since >= total_days - 7:
+        elif days_since >= validity_days - 7:
             data['status'] = 'POR VENCER'
         else:
             data['status'] = 'ACTIVO'
@@ -157,6 +183,8 @@ def update_member(member_id: int, member_data: schemas.MemberCreate, db: Session
 
     db.commit()
     db.refresh(db_member)
+    if db_member.status != old_status:
+        notify_member_status_change(db_member, old_status, db_member.status, db)
     return db_member
 
 @router.get("/members/{member_id}/checkins")
@@ -214,13 +242,13 @@ def get_member_checkins(member_id: int, db: Session = Depends(get_db)):
 
     # Combined checkins & bookings list
     checkins = db.query(models.Checkin).filter(models.Checkin.member_id == member_id).all()
-    checkin_list = [{"id": f"c_{c.id}", "checkin_at": (c.checkin_at or today).isoformat() + "Z", "type": "Tótem Principal"} for c in checkins]
+    checkin_list = [{"id": f"c_{c.id}", "checkin_at": (c.checkin_at or today).isoformat() + "Z", "type": ""} for c in checkins]
 
     bookings = db.query(models.Booking).filter(
         models.Booking.member_id == member_id,
         models.Booking.status.in_(["attended", "reserved"])
     ).all()
-    booking_list = [{"id": f"b_{b.id}", "checkin_at": (b.start_time or today).isoformat() + "Z", "type": b.class_name or "Tótem Adicional"} for b in bookings]
+    booking_list = [{"id": f"b_{b.id}", "checkin_at": (b.attended_at or b.start_time or today).isoformat() + "Z", "type": f'Adicional "{b.class_name}"' if b.class_name else "Adicional"} for b in bookings]
 
     all_attendance = sorted(checkin_list + booking_list, key=lambda x: x["checkin_at"], reverse=True)
 
@@ -237,12 +265,25 @@ def update_member_status(member_id: int, status: str, db: Session = Depends(get_
     member = db.query(models.Member).get(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
+    old_status = member.status
     member.status = status
     db.commit()
+    if old_status != status:
+        notify_member_status_change(member, old_status, status, db)
     return {"status": "updated", "new_status": status}
 
 @router.post("/payments")
-def record_payment(member_id: int, amount: float = 0, method: str = "card", processed_by: str = "", db: Session = Depends(get_db)):
+def record_payment(
+    member_id: int, 
+    amount: float = 0, 
+    method: str = "card", 
+    processed_by: str = "",
+    billing_day: Optional[int] = None,
+    next_due_date: Optional[str] = None,
+    keep_fixed_billing_day: Optional[bool] = False,
+    fixed_due_day: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
     member = db.query(models.Member).get(member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -276,10 +317,68 @@ def record_payment(member_id: int, amount: float = 0, method: str = "card", proc
         created_at=now
     )
     db.add(payment)
+    old_status = member.status
     member.status = "ACTIVO"
-    member.joined_at = now
+
+    wellness = dict(member.wellness_data or {})
+
+    membership_type = (member.membership_type or "").upper()
+    validity_days = 30
+    if "TRIMESTRAL" in membership_type:
+        validity_days = 90
+    elif "SEMESTRAL" in membership_type:
+        validity_days = 180
+    elif "ANUAL" in membership_type:
+        validity_days = 365
+
+    target_fixed_day = fixed_due_day or billing_day
+    if keep_fixed_billing_day and target_fixed_day:
+        wellness["keep_fixed_billing_day"] = True
+        wellness["fixed_due_day"] = int(target_fixed_day)
+    elif keep_fixed_billing_day is False:
+        wellness["keep_fixed_billing_day"] = False
+
+    if next_due_date:
+        try:
+            target_due = datetime.datetime.strptime(next_due_date[:10], "%Y-%m-%d")
+            wellness["next_due_date"] = target_due.strftime("%Y-%m-%d")
+            member.joined_at = target_due - datetime.timedelta(days=validity_days)
+        except Exception:
+            member.joined_at = now
+    else:
+        member.joined_at = now
+
+    member.wellness_data = wellness
+    try:
+        flag_modified(member, "wellness_data")
+    except Exception:
+        pass
+
     db.commit()
-    return {"status": "payment recorded", "amount": final_amount, "details": plan_details}
+    if old_status and old_status != "ACTIVO":
+        notify_member_status_change(member, old_status, "ACTIVO", db)
+
+    # Despachar comprobante de pago digital por correo en paralelo si tiene email registrado
+    if member.email and "@" in str(member.email):
+        try:
+            try:
+                from .email_service import send_payment_receipt_email
+            except Exception:
+                from email_service import send_payment_receipt_email
+
+            plans_list = [member.membership_type or "Plan Principal"] + (member.additional_plans or [])
+            send_payment_receipt_email(
+                member=member,
+                amount=final_amount,
+                method=method,
+                plans_str=" + ".join(plans_list),
+                staff_name=processed_by,
+                next_due_date=wellness.get("next_due_date")
+            )
+        except Exception as e:
+            print(f"[EMAIL PAYMENT ERROR]: {e}")
+
+    return {"status": "payment recorded", "amount": final_amount, "details": plan_details, "next_due_date": wellness.get("next_due_date")}
 
 @router.delete("/payments/{payment_id}")
 def delete_payment(payment_id: int, db: Session = Depends(get_db)):
@@ -289,6 +388,35 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db)):
     db.delete(payment)
     db.commit()
     return {"status": "deleted"}
+
+@router.get("/whatsapp/status")
+def get_whatsapp_gateway_status():
+    """Consulta el estado en vivo de la pasarela y la sesión de WhatsApp."""
+    return check_gateway_status()
+
+@router.post("/whatsapp/send-test")
+def send_test_whatsapp(phone: str, message: str = "Mensaje de prueba desde Fusion Fitness"):
+    """Permite enviar un mensaje de WhatsApp directo a un número para comprobar la conexión."""
+    success = dispatch_whatsapp_message(phone, message)
+    return {"success": success, "target": phone, "message": message}
+
+@router.post("/members/{member_id}/notify")
+def notify_member_manual(member_id: int, db: Session = Depends(get_db)):
+    """Despacha notificación manual en paralelo (WhatsApp + Correo) según el estado actual del socio."""
+    member = db.query(models.Member).get(member_id)
+    if not member:
+        raise HTTPException(status_code=404, detail="Socio no encontrado")
+
+    current_status = member.status or "ACTIVO"
+    dispatched = notify_member_status_change(member, "", current_status, db=db, force=True)
+    return {
+        "success": dispatched,
+        "member_id": member.id,
+        "name": member.name,
+        "status": current_status,
+        "phone": member.phone,
+        "email": member.email
+    }
 
 @router.get("/pricing/dynamic")
 def calculate_dynamic_price(db: Session = Depends(get_db)):
@@ -494,7 +622,8 @@ def get_class_bookings(schedule_id: int, date: str, db: Session = Depends(get_db
     bookings = db.query(models.Booking).filter(
         models.Booking.class_schedule_id == schedule_id,
         models.Booking.start_time >= start_of_day,
-        models.Booking.start_time <= end_of_day
+        models.Booking.start_time <= end_of_day,
+        models.Booking.status != "cancelled"
     ).all()
     
     result = []
@@ -523,8 +652,23 @@ def update_booking_status(booking_id: int, payload: dict, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Estado inválido")
     
     booking.status = new_status
+    if new_status == "attended":
+        booking.attended_at = datetime.datetime.utcnow()
+    else:
+        booking.attended_at = None
+        
     db.commit()
     return {"status": "updated", "booking_id": booking_id, "new_status": new_status}
+
+@router.delete("/bookings/{booking_id}")
+def delete_booking(booking_id: int, db: Session = Depends(get_db)):
+    booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Reserva no encontrada")
+    
+    booking.status = "cancelled"
+    db.commit()
+    return {"status": "success", "message": "Reserva eliminada"}
 
 @router.post("/bookings/walk-in")
 def create_walk_in_booking(payload: dict, db: Session = Depends(get_db)):
@@ -549,6 +693,18 @@ def create_walk_in_booking(payload: dict, db: Session = Depends(get_db)):
     if holiday:
         raise HTTPException(status_code=400, detail=f"No se puede registrar asistencia en un día no laborable: {holiday.description}")
         
+    start_of_day = datetime.datetime.combine(class_date, datetime.time.min)
+    end_of_day = datetime.datetime.combine(class_date, datetime.time.max)
+    bookings_count = db.query(models.Booking).filter(
+        models.Booking.class_schedule_id == schedule_id,
+        models.Booking.start_time >= start_of_day,
+        models.Booking.start_time <= end_of_day,
+        models.Booking.status != "cancelled"
+    ).count()
+    
+    if bookings_count >= schedule.capacity:
+        raise HTTPException(status_code=400, detail="La clase está completa para este día")
+        
     existing = db.query(models.Booking).filter(
         models.Booking.member_id == member.id,
         models.Booking.class_schedule_id == schedule_id,
@@ -568,6 +724,7 @@ def create_walk_in_booking(payload: dict, db: Session = Depends(get_db)):
         class_schedule_id=schedule.id,
         class_name=schedule.name,
         start_time=start_dt,
+        attended_at=datetime.datetime.utcnow(),
         status="attended"
     )
     db.add(new_booking)
@@ -644,19 +801,6 @@ def create_mass_class_schedules(payload: schemas.MassClassScheduleSchema, db: Se
 @router.get("/activities")
 def get_activities(db: Session = Depends(get_db)):
     activities = db.query(models.Activity).all()
-    if not activities:
-        defaults = [
-            {"name": "Entrenamiento Funcional", "code": "EF", "color": "#3b82f6"},
-            {"name": "Pilates en Suelo", "code": "PS", "color": "#f97316"},
-            {"name": "Entrenamiento Personalizado", "code": "EP", "color": "#ec4899"},
-            {"name": "Salsa y Bachata", "code": "SB", "color": "#eab308"},
-            {"name": "Zumba", "code": "ZB", "color": "#ef4444"},
-            {"name": "Reguetón Juvenil", "code": "RJ", "color": "#06b6d4"}
-        ]
-        for d in defaults:
-            db.add(models.Activity(name=d["name"], code=d["code"], color=d["color"]))
-        db.commit()
-        activities = db.query(models.Activity).all()
     return activities
 
 @router.post("/activities")
@@ -727,45 +871,3 @@ def set_config(key: str, payload: dict, db: Session = Depends(get_db)):
         db.add(config)
     db.commit()
     return {"status": "success"}
-
-
-@router.get('/force_migrate')
-def force_migrate():
-    from .migrate_db import migrate
-    migrate()
-    return {'status': 'migrated'}
-
-
-@router.get('/debug_migrate')
-def debug_migrate():
-    from .database import engine
-    from sqlalchemy import text
-    try:
-        with engine.connect() as conn:
-            conn.execute(text('CREATE TABLE IF NOT EXISTS system_configs (id SERIAL PRIMARY KEY, key VARCHAR UNIQUE, value JSON)'))
-            conn.commit()
-            return {'status': 'table created manually'}
-    except Exception as e:
-        return {'error': str(e)}
-
-
-@router.get('/debug_err')
-def debug_err(db: Session = Depends(get_db)):
-    try:
-        return {'status': 'ok', 'val': db.query(models.SystemConfig).first().key if db.query(models.SystemConfig).first() else 'none'}
-    except Exception as e:
-        return {'error': str(e)}
-
-
-@router.get('/debug_drop')
-def debug_drop(db: Session = Depends(get_db)):
-    try:
-        from .database import engine
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            conn.execute(text('DROP TABLE IF EXISTS system_configs'))
-            conn.execute(text('CREATE TABLE system_configs (id SERIAL PRIMARY KEY, key VARCHAR UNIQUE, value JSON)'))
-            conn.commit()
-        return {'status': 'dropped and recreated'}
-    except Exception as e:
-        return {'error': str(e)}

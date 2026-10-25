@@ -357,6 +357,27 @@ def record_payment(
     db.commit()
     if old_status and old_status != "ACTIVO":
         notify_member_status_change(member, old_status, "ACTIVO", db)
+
+    # Despachar comprobante de pago digital por correo en paralelo si tiene email registrado
+    if member.email and "@" in str(member.email):
+        try:
+            try:
+                from .email_service import send_payment_receipt_email
+            except Exception:
+                from email_service import send_payment_receipt_email
+
+            plans_list = [member.membership_type or "Plan Principal"] + (member.additional_plans or [])
+            send_payment_receipt_email(
+                member=member,
+                amount=final_amount,
+                method=method,
+                plans_str=" + ".join(plans_list),
+                staff_name=processed_by,
+                next_due_date=wellness.get("next_due_date")
+            )
+        except Exception as e:
+            print(f"[EMAIL PAYMENT ERROR]: {e}")
+
     return {"status": "payment recorded", "amount": final_amount, "details": plan_details, "next_due_date": wellness.get("next_due_date")}
 
 @router.delete("/payments/{payment_id}")
@@ -378,6 +399,24 @@ def send_test_whatsapp(phone: str, message: str = "Mensaje de prueba desde Fusio
     """Permite enviar un mensaje de WhatsApp directo a un número para comprobar la conexión."""
     success = dispatch_whatsapp_message(phone, message)
     return {"success": success, "target": phone, "message": message}
+
+@router.post("/members/{member_id}/notify")
+def notify_member_manual(member_id: int, db: Session = Depends(get_db)):
+    """Despacha notificación manual en paralelo (WhatsApp + Correo) según el estado actual del socio."""
+    member = db.query(models.Member).get(member_id)
+    if not member:
+        raise HTTPException(status_code=404, detail="Socio no encontrado")
+
+    current_status = member.status or "ACTIVO"
+    dispatched = notify_member_status_change(member, "", current_status, db=db, force=True)
+    return {
+        "success": dispatched,
+        "member_id": member.id,
+        "name": member.name,
+        "status": current_status,
+        "phone": member.phone,
+        "email": member.email
+    }
 
 @router.get("/pricing/dynamic")
 def calculate_dynamic_price(db: Session = Depends(get_db)):
