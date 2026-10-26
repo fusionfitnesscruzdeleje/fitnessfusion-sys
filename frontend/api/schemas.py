@@ -22,7 +22,7 @@ class MemberPaymentSchema(BaseModel):
     def from_orm(cls, obj):
         # Custom mapping for the frontend format
         return {
-            "date": obj.created_at.strftime("%Y-%m-%d"),
+            "date": obj.created_at.strftime("%Y-%m-%d") if getattr(obj, "created_at", None) else "",
             "amount": obj.amount,
             "plan": "Premium", # In a real app, you'd store the plan name in the payment
             "method": obj.method,
@@ -57,7 +57,7 @@ class MemberCreate(BaseModel):
 
 class MemberSchema(MemberBase):
     id: int
-    joined_at: datetime
+    joined_at: Optional[datetime] = None
     last_checkin: Optional[datetime] = None
     billing_history: List[Dict] = [] # We'll populate this manually in the route for now
 

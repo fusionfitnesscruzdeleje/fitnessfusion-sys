@@ -1,15 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from database import get_db
-import models
-import schemas
 from typing import List, Optional
 import datetime
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
+
 try:
+    from .database import get_db
+    from . import models
+    from . import schemas
     from .whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
-except ImportError:
+except (ImportError, ValueError):
+    from database import get_db
+    import models
+    import schemas
     from whatsapp_service import notify_member_status_change, dispatch_whatsapp_message, check_gateway_status
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -51,35 +55,44 @@ def get_gym_stats(db: Session = Depends(get_db)):
 
 @router.get("/members", response_model=List[schemas.MemberSchema])
 def get_all_members(db: Session = Depends(get_db)):
-    members = db.query(models.Member).all()
-    now = datetime.datetime.utcnow()
-    updated = False
-    for m in members:
-        if m.status != "INACTIVO" and m.joined_at:
-            membership_type = (m.membership_type or "").upper()
-            validity_days = 30
-            if "TRIMESTRAL" in membership_type:
-                validity_days = 90
-            elif "SEMESTRAL" in membership_type:
-                validity_days = 180
-            elif "ANUAL" in membership_type:
-                validity_days = 365
+    try:
+        members = db.query(models.Member).all()
+        now = datetime.datetime.utcnow()
+        updated = False
+        for m in members:
+            if m.status != "INACTIVO" and m.joined_at:
+                membership_type = (m.membership_type or "").upper()
+                validity_days = 30
+                if "TRIMESTRAL" in membership_type:
+                    validity_days = 90
+                elif "SEMESTRAL" in membership_type:
+                    validity_days = 180
+                elif "ANUAL" in membership_type:
+                    validity_days = 365
 
-            wellness = m.wellness_data or {}
-            next_due_str = wellness.get("next_due_date")
-            new_status = m.status
-            if next_due_str:
-                try:
-                    due_date = datetime.datetime.strptime(next_due_str[:10], "%Y-%m-%d").date()
-                    today_date = now.date()
-                    days_until_due = (due_date - today_date).days
-                    if days_until_due < 0:
-                        new_status = "DEUDA"
-                    elif days_until_due <= 7:
-                        new_status = "POR VENCER"
-                    else:
-                        new_status = "ACTIVO"
-                except Exception:
+                wellness = m.wellness_data or {}
+                next_due_str = wellness.get("next_due_date")
+                new_status = m.status
+                if next_due_str:
+                    try:
+                        due_date = datetime.datetime.strptime(next_due_str[:10], "%Y-%m-%d").date()
+                        today_date = now.date()
+                        days_until_due = (due_date - today_date).days
+                        if days_until_due < 0:
+                            new_status = "DEUDA"
+                        elif days_until_due <= 7:
+                            new_status = "POR VENCER"
+                        else:
+                            new_status = "ACTIVO"
+                    except Exception:
+                        days_since = (now - m.joined_at).days
+                        if days_since >= validity_days:
+                            new_status = "DEUDA"
+                        elif days_since >= validity_days - 7:
+                            new_status = "POR VENCER"
+                        else:
+                            new_status = "ACTIVO"
+                else:
                     days_since = (now - m.joined_at).days
                     if days_since >= validity_days:
                         new_status = "DEUDA"
@@ -87,40 +100,39 @@ def get_all_members(db: Session = Depends(get_db)):
                         new_status = "POR VENCER"
                     else:
                         new_status = "ACTIVO"
-            else:
-                days_since = (now - m.joined_at).days
-                if days_since >= validity_days:
-                    new_status = "DEUDA"
-                elif days_since >= validity_days - 7:
-                    new_status = "POR VENCER"
-                else:
-                    new_status = "ACTIVO"
-            
-            if m.status != new_status:
-                old_status = m.status
-                m.status = new_status
-                updated = True
-                notify_member_status_change(m, old_status, new_status, db)
-    if updated:
-        db.commit()
+                
+                if m.status != new_status:
+                    old_status = m.status
+                    m.status = new_status
+                    updated = True
+                    try:
+                        notify_member_status_change(m, old_status, new_status, db)
+                    except Exception as e:
+                        print(f"[STATUS NOTIFICATION ERROR]: {e}")
+        if updated:
+            db.commit()
 
-    result = []
-    for m in members:
-        # Convert to dict first to avoid Pydantic mutability constraints
-        m_dict = schemas.MemberSchema.from_orm(m).dict()
-        m_dict["billing_history"] = [
-            {
-                "id": p.id,
-                "date": p.created_at.strftime("%Y-%m-%d"),
-                "amount": p.amount,
-                "plan": m.membership_type or "Musculación",
-                "method": p.method,
-                "processed_by": p.stripe_id or "—",
-                "status": "PAGADO"
-            } for p in sorted(m.payments, key=lambda x: x.created_at, reverse=True)
-        ]
-        result.append(m_dict)
-    return result
+        result = []
+        for m in members:
+            # Convert to dict first to avoid Pydantic mutability constraints
+            m_dict = schemas.MemberSchema.from_orm(m).dict()
+            m_dict["billing_history"] = [
+                {
+                    "id": p.id,
+                    "date": p.created_at.strftime("%Y-%m-%d") if getattr(p, "created_at", None) else "",
+                    "amount": p.amount or 0,
+                    "plan": m.membership_type or "Musculación",
+                    "method": p.method or "Efectivo",
+                    "processed_by": p.stripe_id or "—",
+                    "status": "PAGADO"
+                } for p in sorted(m.payments or [], key=lambda x: x.created_at or datetime.datetime.min, reverse=True)
+            ]
+            result.append(m_dict)
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error obteniendo socios: {str(e)}")
 
 @router.post("/members", response_model=schemas.MemberSchema)
 def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
